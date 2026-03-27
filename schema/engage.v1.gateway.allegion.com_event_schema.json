@@ -1,0 +1,44 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "engage.v1.gateway.allegion.com Event",
+    "description": "An event sent from the client asynchronously to the server",
+    "type": "object",
+    "properties": {
+        "eventId": {
+            "description": "Unique id between all events",
+            "type": "integer"
+        },
+        "event": {
+            "description": "Object that represents the contents of a event",
+            "type": "object",
+            "properties": {
+                "eventType": {
+                    "description": "Indicator of type of body contents",
+                    "type": "string"
+                },
+                "source": {
+                    "description": "Identifies the source of the event",
+                    "type": "string"
+                },
+                "deviceId": {
+                    "description": "Serial number of the source device",
+                    "type": "string"
+                },
+                "eventBody": {
+                    "description": "Contains the event message",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "eventType",
+                "source",
+                "deviceId",
+                "eventBody"
+            ]
+        }
+    },
+    "required": [
+        "eventId",
+        "event"
+    ]
+}

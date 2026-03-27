@@ -1,0 +1,34 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "engage.v1.gateway.allegion.com Response",
+    "description": "A response sent by the client to the server associated with a request",
+    "type": "object",
+    "properties": {
+        "requestId": {
+            "description": "Unique id matching the associated request's id",
+            "type": "integer"
+        },
+        "response": {
+            "description": "Object that represents the contents of a response",
+            "type": "object",
+            "properties": {
+                "status": {
+                    "description": "The HTTP-style status code of the response",
+                    "type": "string"
+                },
+                "messageBody": {
+                    "description": "The additional body information associated with the response",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "status",
+                "messageBody"
+            ]
+        }
+    },
+    "required": [
+        "requestId",
+        "response"
+    ]
+}

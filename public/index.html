@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ENGAGE Gateway Dashboard</title>
+  <style>
+    /* ── Design tokens ───────────────────────────────────────────────────────── */
+    :root {
+      --bg:           #0d1117;
+      --surface:      #161b22;
+      --surface2:     #1c2230;
+      --border:       #2d3748;
+      --text:         #e2e8f0;
+      --text-muted:   #8b949e;
+      --accent:       #6366f1;
+      --accent-dim:   rgba(99,102,241,.15);
+      --green:        #22c55e;
+      --green-dim:    rgba(34,197,94,.15);
+      --red:          #ef4444;
+      --red-dim:      rgba(239,68,68,.15);
+      --yellow:       #f59e0b;
+      --yellow-dim:   rgba(245,158,11,.15);
+      --blue:         #3b82f6;
+      --blue-dim:     rgba(59,130,246,.15);
+    }
+
+    /* ── Reset + base ────────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-size: 13px;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ──────────────────────────────────────────────────────────────── */
+    header {
+      flex-shrink: 0;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 20px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .logo {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: -0.3px;
+    }
+    .logo span { color: var(--text-muted); font-weight: 400; }
+    .header-meta {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .server-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+    }
+    .pulse {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .4; }
+    }
+
+    /* ── Main layout ─────────────────────────────────────────────────────────── */
+    .layout {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 240px 1fr 340px;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ─────────────────────────────────────────────────────────────── */
+    .sidebar {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Middle pane (devices + events) ─────────────────────────────────────── */
+    .middle {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Right pane (event detail) ──────────────────────────────────────────── */
+    .right {
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Section headers ─────────────────────────────────────────────────────── */
+    .section-header {
+      flex-shrink: 0;
+      padding: 12px 16px 8px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .badge-count {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1px 7px;
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    /* ── Scrollable content areas ────────────────────────────────────────────── */
+    .scroll-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+    }
+    .scroll-area::-webkit-scrollbar { width: 4px; }
+    .scroll-area::-webkit-scrollbar-track { background: transparent; }
+    .scroll-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ── Gateway items ───────────────────────────────────────────────────────── */
+    .gateway-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      margin-bottom: 4px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      cursor: default;
+    }
+    .gateway-item.active { border-color: var(--accent); background: var(--accent-dim); }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .status-dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .status-dot.offline { background: var(--text-muted); }
+    .gateway-info { min-width: 0; }
+    .gateway-sn { font-weight: 600; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .gateway-since { font-size: 11px; color: var(--text-muted); }
+
+    .empty-state {
+      text-align: center;
+      padding: 32px 16px;
+      color: var(--text-muted);
+    }
+    .empty-state .icon { font-size: 28px; margin-bottom: 8px; }
+    .empty-state p { font-size: 12px; line-height: 1.5; }
+
+    /* ── Device cards ────────────────────────────────────────────────────────── */
+    .devices-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-bottom: 1px solid var(--border);
+      min-height: 0;
+    }
+    .devices-grid {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 10px;
+      align-content: start;
+    }
+    .devices-grid::-webkit-scrollbar { width: 4px; }
+    .devices-grid::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .device-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: border-color .15s;
+    }
+    .device-card:hover { border-color: color-mix(in srgb, var(--border) 60%, var(--accent)); }
+    .device-card.state-secure   { border-top: 2px solid var(--red); }
+    .device-card.state-passage  { border-top: 2px solid var(--green); }
+    .device-card.state-momentary { border-top: 2px solid var(--yellow); }
+
+    .device-name {
+      font-weight: 600;
+      font-size: 13px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .device-id { font-size: 10px; color: var(--text-muted); }
+
+    .state-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 9px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      width: fit-content;
+    }
+    .state-secure    { background: var(--red-dim);    color: #f87171; }
+    .state-passage   { background: var(--green-dim);  color: #4ade80; }
+    .state-momentary { background: var(--yellow-dim); color: #fbbf24; }
+    .state-unknown   { background: var(--surface);    color: var(--text-muted); border: 1px solid var(--border); }
+
+    .btn-group { display: flex; gap: 5px; flex-wrap: wrap; }
+    .btn {
+      padding: 5px 10px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      transition: opacity .15s, transform .1s;
+      white-space: nowrap;
+    }
+    .btn:hover:not(:disabled) { opacity: .85; }
+    .btn:active:not(:disabled) { transform: scale(.96); }
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-lock    { background: var(--red-dim);    color: #f87171;  border-color: rgba(239,68,68,.3); }
+    .btn-unlock  { background: var(--green-dim);  color: #4ade80;  border-color: rgba(34,197,94,.3); }
+    .btn-grant   { background: var(--yellow-dim); color: #fbbf24;  border-color: rgba(245,158,11,.3); }
+
+    /* ── Event log ───────────────────────────────────────────────────────────── */
+    .events-section {
+      flex: 0 0 320px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .events-toolbar {
+      flex-shrink: 0;
+      display: flex;
+      gap: 4px;
+      padding: 6px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .filter-btn {
+      padding: 2px 10px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .filter-btn:hover { border-color: var(--accent); color: var(--text); }
+    .filter-btn.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+
+    .event-table-wrap {
+      flex: 1;
+      overflow-y: auto;
+    }
+    .event-table-wrap::-webkit-scrollbar { width: 4px; }
+    .event-table-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .event-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+    .event-table thead th {
+      position: sticky;
+      top: 0;
+      background: var(--surface2);
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      padding: 5px 8px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .event-table tbody tr {
+      border-left: 3px solid transparent;
+      cursor: pointer;
+      transition: background .1s;
+      animation: slideIn .2s ease;
+    }
+    .event-table tbody tr:hover { background: var(--surface2); }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+
+    .event-table tbody tr.result-granted { border-left-color: var(--green); }
+    .event-table tbody tr.result-denied  { border-left-color: var(--red); }
+    .event-table tbody tr.result-alert   { border-left-color: #f97316; background: rgba(249,115,22,.04); }
+    .event-table tbody tr.result-warning { border-left-color: var(--yellow); }
+    .event-table tbody tr.result-info    { border-left-color: var(--accent); }
+
+    .event-table td {
+      padding: 6px 8px;
+      border-bottom: 1px solid rgba(45,55,72,.6);
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    .event-table td.ev-title { white-space: normal; min-width: 140px; }
+    .event-table td.ev-reason { color: var(--text-muted); max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+
+    .result-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 7px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .result-pill.granted { background: var(--green-dim);          color: #4ade80; }
+    .result-pill.denied  { background: var(--red-dim);            color: #f87171; }
+    .result-pill.alert   { background: rgba(249,115,22,.15);      color: #fb923c; }
+    .result-pill.warning { background: var(--yellow-dim);         color: #fbbf24; }
+    .result-pill.info    { background: var(--accent-dim);         color: #818cf8; }
+
+    .cat-pill {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 8px;
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+    .ev-time { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+    /* ── Event detail panel (right column) ──────────────────────────────────── */
+    .detail-panel {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+    }
+    .detail-panel::-webkit-scrollbar { width: 4px; }
+    .detail-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .detail-empty {
+      padding: 32px 16px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .detail-item {
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      margin-bottom: 6px;
+      font-size: 12px;
+    }
+    .detail-item-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .detail-item-type { font-weight: 600; }
+    .detail-item-time { color: var(--text-muted); font-size: 11px; }
+    .detail-item-body { color: var(--text-muted); word-break: break-all; }
+
+    /* ── Spinner overlay for action buttons ──────────────────────────────────── */
+    .btn.loading::after {
+      content: '';
+      display: inline-block;
+      width: 8px; height: 8px;
+      border: 1.5px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+      margin-left: 5px;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Toast notifications ─────────────────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(10px);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 18px;
+      font-size: 12px;
+      opacity: 0;
+      transition: opacity .25s, transform .25s;
+      pointer-events: none;
+      z-index: 1000;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    #toast.success { border-color: var(--green);  color: #4ade80; }
+    #toast.error   { border-color: var(--red);    color: #f87171; }
+    #toast.warn    { border-color: var(--yellow); color: #fbbf24; }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────────── -->
+<header>
+  <div class="logo">ENGAGE <span>Gateway Dashboard</span></div>
+  <div class="header-meta">
+    <div class="server-badge">
+      <div class="pulse"></div>
+      <span id="server-label">Connecting…</span>
+    </div>
+    <span id="uptime-label"></span>
+  </div>
+</header>
+
+<!-- ── Main layout ───────────────────────────────────────────────────────────── -->
+<div class="layout">
+
+  <!-- ── Sidebar: gateways ─────────────────────────────────────────────────── -->
+  <div class="sidebar">
+    <div class="section-header">
+      Gateways
+      <span class="badge-count" id="gw-count">0</span>
+    </div>
+    <div class="scroll-area" id="gateways-list">
+      <div class="empty-state">
+        <div class="icon">📡</div>
+        <p>No gateways connected.<br>Point a gateway at this server.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Middle: devices + events ──────────────────────────────────────────── -->
+  <div class="middle">
+
+    <!-- Devices -->
+    <div class="devices-section">
+      <div class="section-header">
+        Devices
+        <span class="badge-count" id="device-count">0</span>
+      </div>
+      <div class="devices-grid" id="devices-grid">
+        <div class="empty-state" style="grid-column:1/-1">
+          <div class="icon">🔒</div>
+          <p>No devices discovered yet.<br>Connect a gateway to see linked locks.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Events -->
+    <div class="events-section">
+      <div class="section-header">
+        Event Log
+        <span class="badge-count" id="event-count">0</span>
+      </div>
+      <div class="events-toolbar">
+        <button class="filter-btn active" data-filter="all"     onclick="setFilter('all',this)">All</button>
+        <button class="filter-btn"        data-filter="granted" onclick="setFilter('granted',this)">✅ Granted</button>
+        <button class="filter-btn"        data-filter="denied"  onclick="setFilter('denied',this)">❌ Denied</button>
+        <button class="filter-btn"        data-filter="alert"   onclick="setFilter('alert',this)">🚨 Alerts</button>
+      </div>
+      <div class="event-table-wrap">
+        <table class="event-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Result</th>
+              <th>Category</th>
+              <th class="ev-title">Event</th>
+              <th>Device</th>
+              <th>Reason</th>
+            </tr>
+          </thead>
+          <tbody id="event-tbody">
+            <tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);">Waiting for events…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Right: Event detail ───────────────────────────────────────────────── -->
+  <div class="right">
+    <div class="section-header">
+      Event Detail
+    </div>
+    <div class="detail-panel" id="detail-panel">
+      <div class="detail-empty">
+        Select an event from the stream to see its full payload.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Toast ──────────────────────────────────────────────────────────────────── -->
+<div id="toast"></div>
+
+<!-- ── App script ─────────────────────────────────────────────────────────────── -->
+<script>
+'use strict';
+
+// ── State ─────────────────────────────────────────────────────────────────────
+const state = {
+  gateways: [],
+  devices:  {},
+  events:   [],   // [{ sn, eventType, category, title, result, reason, source, deviceId, body, timestamp }]
+  filter:   'all',
+};
+
+// ── SSE connection ────────────────────────────────────────────────────────────
+const sse = new EventSource('/api/stream');
+
+sse.addEventListener('init', e => {
+  const data = JSON.parse(e.data);
+  state.gateways = data.gateways || [];
+  state.devices  = data.devices  || {};
+  state.events   = data.events   || [];
+
+  document.getElementById('server-label').textContent =
+    `ws://localhost — port ${data.port || ''}`;
+
+  renderAll();
+});
+
+sse.addEventListener('gateway:connected', e => {
+  const { sn, connectedAt } = JSON.parse(e.data);
+  if (!state.gateways.find(g => g.sn === sn)) {
+    state.gateways.push({ sn, connectedAt });
+  }
+  addEvent({ eventType: null, category: 'Gateway', title: 'Gateway Connected', result: 'info', reason: '', source: 'server', deviceId: '', body: '', timestamp: connectedAt, sn });
+  renderGateways();
+});
+
+sse.addEventListener('gateway:disconnected', e => {
+  const { sn } = JSON.parse(e.data);
+  state.gateways = state.gateways.filter(g => g.sn !== sn);
+  delete state.devices[sn];
+  addEvent({ eventType: null, category: 'Gateway', title: 'Gateway Disconnected', result: 'warning', reason: '', source: 'server', deviceId: '', body: '', timestamp: new Date().toISOString(), sn });
+  renderAll();
+});
+
+sse.addEventListener('device:list', e => {
+  const { sn, devices } = JSON.parse(e.data);
+  state.devices[sn] = devices;
+  renderDevices();
+  updateDeviceCount();
+});
+
+sse.addEventListener('engage:event', e => {
+  const data = JSON.parse(e.data);
+  addEvent(data);
+});
+
+sse.addEventListener('lock:result', e => {
+  const { sn, link_id, action, status } = JSON.parse(e.data);
+  if (status === '200' && state.devices[sn]) {
+    state.devices[sn].forEach(d => {
+      if (link_id === 'all' || d.linkId === link_id) d.lockState = action;
+    });
+    renderDevices();
+  }
+});
+
+// Server emits this when a lock command found no connected gateway and is now
+// waiting for the 24-hour re-authentication to complete before retrying.
+sse.addEventListener('lock:retrying', e => {
+  const { link_id } = JSON.parse(e.data);
+  // Update any button currently in loading state for this device
+  document.querySelectorAll(`[data-linkid="${link_id}"] .btn`).forEach(b => {
+    if (b.disabled) b.textContent = '⟳ Reconnecting…';
+  });
+  showToast('Gateway is re-authenticating — command will be sent automatically once reconnected', 'warn', 32000);
+});
+
+sse.onerror = () => {
+  document.getElementById('server-label').textContent = 'Reconnecting…';
+};
+
+sse.onopen = () => {
+  document.getElementById('server-label').textContent = 'Connected';
+};
+
+// ── Rendering ─────────────────────────────────────────────────────────────────
+
+function renderAll() {
+  renderGateways();
+  renderDevices();
+  renderEvents();
+}
+
+function renderGateways() {
+  const el = document.getElementById('gateways-list');
+  document.getElementById('gw-count').textContent = state.gateways.length;
+
+  if (state.gateways.length === 0) {
+    el.innerHTML = `<div class="empty-state"><div class="icon">📡</div>
+      <p>No gateways connected.<br>Point a gateway at this server.</p></div>`;
+    return;
+  }
+
+  el.innerHTML = state.gateways.map(gw => `
+    <div class="gateway-item active">
+      <div class="status-dot online"></div>
+      <div class="gateway-info">
+        <div class="gateway-sn">${esc(gw.sn)}</div>
+        <div class="gateway-since">Connected ${fmtTime(gw.connectedAt)}</div>
+        <div class="gateway-since" title="${esc(gw.lastAuthAt || '')}">
+          Last auth: ${gw.lastAuthAt ? fmtTime(gw.lastAuthAt) : '—'}
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderDevices() {
+  const grid = document.getElementById('devices-grid');
+  const allDevices = Object.entries(state.devices).flatMap(([sn, devs]) =>
+    devs.map(d => ({ ...d, sn }))
+  );
+
+  updateDeviceCount();
+
+  if (allDevices.length === 0) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+      <div class="icon">🔒</div>
+      <p>No devices discovered yet.<br>Connect a gateway to see linked locks.</p>
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = allDevices.map(d => {
+    const { cls, label, icon } = stateInfo(d.lockState);
+    return `
+      <div class="device-card ${cls}" data-sn="${esc(d.sn)}" data-linkid="${esc(d.linkId)}">
+        <div class="device-name" title="${esc(d.deviceName)}">${esc(d.deviceName)}</div>
+        <div class="device-id">${esc(d.linkId)}</div>
+        <div class="state-badge ${cls}">${icon} ${label}</div>
+        <div class="btn-group">
+          <button class="btn btn-lock"   onclick="lockAction('${esc(d.sn)}','${esc(d.linkId)}','secure',this)">🔒 Lock</button>
+          <button class="btn btn-unlock" onclick="lockAction('${esc(d.sn)}','${esc(d.linkId)}','passage',this)">🔓 Unlock</button>
+          <button class="btn btn-grant"  onclick="lockAction('${esc(d.sn)}','${esc(d.linkId)}','momentaryUnlock',this)">⚡ Grant</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function updateDeviceCount() {
+  const total = Object.values(state.devices).reduce((s, d) => s + d.length, 0);
+  document.getElementById('device-count').textContent = total;
+}
+
+function setFilter(f, btn) {
+  state.filter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderEvents();
+}
+
+function renderEvents() {
+  const tbody = document.getElementById('event-tbody');
+  const filtered = state.filter === 'all'
+    ? state.events
+    : state.events.filter(ev => ev.result === state.filter);
+
+  document.getElementById('event-count').textContent = state.events.length;
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);">
+      ${state.events.length === 0 ? 'Waiting for events…' : 'No events match this filter.'}
+    </td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.slice(0, 100).map((ev, i) => {
+    const result  = ev.result   || 'info';
+    const title   = ev.title    || String(ev.eventType || '');
+    const cat     = ev.category || '';
+    const reason  = ev.reason   || '';
+    const device  = ev.deviceId || '';
+    const realIdx = state.events.indexOf(ev);
+    return `<tr class="result-${result}" onclick="showEventDetail(state.events[${realIdx}])">
+      <td class="ev-time">${fmtTimestamp(ev.timestamp)}</td>
+      <td><span class="result-pill ${result}">${resultIcon(result)} ${resultLabel(result)}</span></td>
+      <td>${cat ? `<span class="cat-pill">${esc(cat)}</span>` : ''}</td>
+      <td class="ev-title">${esc(title)}</td>
+      <td style="color:var(--text-muted);font-size:10px;">${esc(device)}</td>
+      <td class="ev-reason">${esc(reason)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function addEvent(ev) {
+  state.events.unshift(ev);
+  if (state.events.length > 200) state.events.pop();
+  renderEvents();
+}
+
+// ── Lock action ───────────────────────────────────────────────────────────────
+
+async function lockAction(sn, linkId, action, btn) {
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.classList.add('loading');
+
+  try {
+    // The server may hold this request open for up to ~30 s while it waits for
+    // the gateway to complete its 24-hour re-authentication cycle.  The button
+    // stays in loading state during that wait; the lock:retrying SSE event
+    // updates the button label to "⟳ Reconnecting…" so the user has feedback.
+    const res = await fetch('/api/lock', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gateway_sn: sn, link_id: linkId, action }),
+    });
+    const data = await res.json();
+    if (res.ok && data.status === '200') {
+      showToast(`${actionLabel(action)} — OK`, 'success');
+    } else {
+      showToast(data.error || `Error: ${data.status || res.status}`, 'error');
+    }
+  } catch (e) {
+    showToast(`Request failed: ${e.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('loading');
+    btn.textContent = originalText; // restore label if it was changed to "⟳ Reconnecting…"
+  }
+}
+
+// ── Event detail panel ────────────────────────────────────────────────────────
+
+function showEventDetail(ev) {
+  const panel = document.getElementById('detail-panel');
+  const result = ev.result || 'info';
+
+  let parsed = null;
+  let bodyStr = '';
+  try {
+    parsed  = typeof ev.body === 'string' ? JSON.parse(ev.body) : ev.body;
+    bodyStr = JSON.stringify(parsed, null, 2);
+  } catch {
+    bodyStr = String(ev.body || '');
+  }
+
+  // Extract known credential fields for a clean summary row
+  const fields = [];
+  if (parsed) {
+    if (parsed.badgeId   || parsed.badge_id)   fields.push(['Card / Badge',  parsed.badgeId   || parsed.badge_id]);
+    if (parsed.userId    || parsed.user_id)    fields.push(['User ID',       parsed.userId    || parsed.user_id]);
+    if (parsed.cardNumber)                     fields.push(['Card Number',   parsed.cardNumber]);
+    if (parsed.facilityCode !== undefined)     fields.push(['Facility Code', parsed.facilityCode]);
+    if (parsed.auditEvent !== undefined)       fields.push(['Audit Code',    `0x${Number(parsed.auditEvent).toString(16).toUpperCase().padStart(4,'0')}`]);
+    if (parsed.auditData  !== undefined)       fields.push(['Audit Data',    parsed.auditData]);
+  }
+
+  panel.innerHTML = `
+    <div class="detail-item" style="border-color:${resultColor(result)}">
+      <div class="detail-item-header">
+        <span class="result-pill ${result}" style="font-size:12px;padding:4px 10px">
+          ${resultIcon(result)} ${ev.title || resultLabel(result)}
+        </span>
+        <span class="detail-item-time">${fmtTimestamp(ev.timestamp)}</span>
+      </div>
+    </div>
+
+    <div class="detail-item" style="margin-top:6px">
+      ${row('Gateway',  ev.sn)}
+      ${row('Source',   ev.source)}
+      ${row('Device',   ev.deviceId)}
+      ${row('Category', ev.category)}
+      ${row('Event Code', fmtEventCode(ev.eventType))}
+      ${ev.reason ? row('Reason', ev.reason) : ''}
+      ${fields.map(([k,v]) => row(k, v)).join('')}
+    </div>
+
+    ${bodyStr ? `
+    <div class="detail-item" style="margin-top:6px">
+      <div style="font-size:10px;font-weight:700;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em">Raw Payload</div>
+      <pre style="font-size:10px;color:var(--text-muted);white-space:pre-wrap;word-break:break-all;margin:0">${esc(bodyStr)}</pre>
+    </div>` : ''}
+  `;
+}
+
+function row(label, value) {
+  if (value === null || value === undefined || value === '') return '';
+  return `<div style="display:flex;gap:8px;padding:3px 0;border-bottom:1px solid rgba(45,55,72,.4)">
+    <span style="color:var(--text-muted);font-size:11px;min-width:90px;flex-shrink:0">${esc(label)}</span>
+    <span style="font-size:11px;word-break:break-all">${esc(String(value))}</span>
+  </div>`;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function stateInfo(state) {
+  switch (state) {
+    case 'secure':          return { cls: 'state-secure',    label: 'Locked',          icon: '🔒' };
+    case 'passage':         return { cls: 'state-passage',   label: 'Unlocked',        icon: '🔓' };
+    case 'momentaryUnlock': return { cls: 'state-momentary', label: 'Momentary Unlock', icon: '⚡' };
+    default:                return { cls: 'state-unknown',   label: 'Unknown',          icon: '❓' };
+  }
+}
+
+function actionLabel(action) {
+  switch (action) {
+    case 'secure':          return 'Lock';
+    case 'passage':         return 'Unlock';
+    case 'momentaryUnlock': return 'Quick Grant';
+    default:                return action;
+  }
+}
+
+function fmtTime(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function fmtTimestamp(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function resultIcon(result) {
+  switch (result) {
+    case 'granted': return '✅';
+    case 'denied':  return '❌';
+    case 'alert':   return '🚨';
+    case 'warning': return '⚠️';
+    default:        return 'ℹ️';
+  }
+}
+
+function resultLabel(result) {
+  switch (result) {
+    case 'granted': return 'Granted';
+    case 'denied':  return 'Denied';
+    case 'alert':   return 'Alert';
+    case 'warning': return 'Warning';
+    default:        return 'Info';
+  }
+}
+
+// Parse 8-char ENGAGE eventType string into human-readable code + data
+function fmtEventCode(eventType) {
+  if (eventType === null || eventType === undefined) return null;
+  const s = String(eventType).replace(/^0x/i, '');
+  if (s.length === 8) {
+    const code = s.slice(0, 4).toUpperCase();
+    const data = parseInt(s.slice(4), 16);
+    return `0x${code}${data ? ` (data: ${data})` : ''}`;
+  }
+  const n = parseInt(s, 16) || parseInt(s, 10);
+  return isNaN(n) ? String(eventType) : `0x${n.toString(16).toUpperCase().padStart(4, '0')}`;
+}
+
+function resultColor(result) {
+  switch (result) {
+    case 'granted': return 'var(--green)';
+    case 'denied':  return 'var(--red)';
+    case 'alert':   return '#f97316';
+    case 'warning': return 'var(--yellow)';
+    default:        return 'var(--accent)';
+  }
+}
+
+function esc(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+let toastTimer;
+function showToast(msg, type = '', durationMs = 3000) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `show ${type}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = ''; }, durationMs);
+}
+</script>
+
+</body>
+</html>

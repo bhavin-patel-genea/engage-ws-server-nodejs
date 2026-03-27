@@ -1,0 +1,43 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "engage.v1.gateway.allegion.com Request",
+    "description": "A request sent by the server to the client",
+    "type": "object",
+    "properties": {
+        "requestId": {
+            "description": "Unique id between all requests",
+            "type": "integer"
+        },
+        "request": {
+            "description": "Object that represents the contents of a request",
+            "type": "object",
+            "properties": {
+                "method": {
+                    "description": "The HTTP-style method of the request",
+                    "type": "string"
+                },
+                "path": {
+                    "description": "The path which the request is targeted at",
+                    "type": "string"
+                },
+                "messageBody": {
+                    "description": "The additional body information associated with the request",
+                    "type": "string"
+                },
+                "optionalQueryStrings": {
+                    "description": "Optional strings that may be required",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "method",
+                "path",
+                "messageBody"
+            ]
+        }
+    },
+    "required": [
+        "requestId",
+        "request"
+    ]
+}

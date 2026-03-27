@@ -1,0 +1,74 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "engage.v1.gateway.allegion.com Event Subscription",
+    "description": "A message sent from the server to the client indicating the desired events to be received",
+    "type": "object",
+    "properties": {
+        "subscriptionId": {
+            "description": "Unique id between all event subscriptions",
+            "type": "integer"
+        },
+        "subscription": {
+            "description": "Array that represents the contents of a subscription",
+            "type": "array",
+            "items": [
+                {
+                    "type": "object",
+                    "description": "Object that represents the Gateway specific subscription infomation",
+                    "properties": {
+                        "source": {
+                            "description": "Indicator of the type of subscription contents",
+                            "type": "string",
+                            "enum": [
+                                "gateway"
+                            ]
+                        },
+                        "eventingEnabled": {
+                            "description": "Indicates whether events of this type are desired",
+                            "type": "boolean"
+                        },
+                        "subscriptionBody": {
+                            "description": "TDB. Will eventually contain more specific subscription info",
+                            "type": "object"
+                        }
+                    },
+                    "required" : [
+                        "source",
+                        "eventingEnabled",
+                        "subscriptionBody"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "description": "Object that represents the edgeDevice specific subscription infomation",
+                    "properties": {
+                        "source": {
+                            "description": "Indicator of the type of subscription contents",
+                            "type": "string",
+                            "enum": [
+                                "edgeDevice"
+                            ]
+                        },
+                        "eventingEnabled": {
+                            "description": "Indicates whether events of this type are desired",
+                            "type": "boolean"
+                        },
+                        "subscriptionBody": {
+                            "description": "TDB. Will eventually contain more specific subscription info",
+                            "type": "object"
+                        }
+                    },
+                    "required" : [
+                        "source",
+                        "eventingEnabled",
+                        "subscriptionBody"
+                    ]
+                }
+            ]
+        }
+    },
+    "required": [
+        "subscriptionId",
+        "subscription"
+    ]
+}

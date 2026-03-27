@@ -1,0 +1,56 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Engage Server Configuration",
+    "description": "Configuration for the ENGAGE WebSocket/HTTP server",
+    "type": "object",
+    "properties": {
+        "server_port": {
+            "description": "Port for the main WebSocket + HTTP server. Defaults to 8080.",
+            "type": "integer",
+            "minimum": 1
+        },
+        "site_key_file": {
+            "description": "Path to the site key file (64 hex chars, 32-byte AES-256 key).",
+            "type": "string"
+        },
+        "ssl_info": {
+            "oneOf": [
+                {
+                    "type": "object",
+                    "properties": {
+                        "ssl_enabled": { "type": "boolean", "enum": [false] }
+                    },
+                    "required": ["ssl_enabled"]
+                },
+                {
+                    "type": "object",
+                    "properties": {
+                        "ssl_enabled": { "type": "boolean", "enum": [true] },
+                        "ssl_key":  { "description": "Path to the server TLS private key (PEM, unencrypted).", "type": "string" },
+                        "ssl_cert": { "description": "Path to the server TLS certificate (PEM, signed by root CA).", "type": "string" }
+                    },
+                    "required": ["ssl_enabled", "ssl_key", "ssl_cert"]
+                }
+            ]
+        },
+        "ca_server_port": {
+            "description": "Port for the plain-HTTP CA certificate server. Only used when ssl_enabled is true. Defaults to 8080.",
+            "type": "integer",
+            "minimum": 1
+        },
+        "root_ca_file": {
+            "description": "Path to the DER-encoded root CA certificate served to gateways. Defaults to ./config/rootca.der.",
+            "type": "string"
+        },
+        "event_subscription_info": {
+            "description": "Controls which event sources the gateway streams back.",
+            "type": "object",
+            "properties": {
+                "gateway_events":    { "type": "boolean" },
+                "edgedevice_events": { "type": "boolean" }
+            },
+            "required": ["gateway_events", "edgedevice_events"]
+        }
+    },
+    "required": ["site_key_file", "ssl_info", "event_subscription_info"]
+}

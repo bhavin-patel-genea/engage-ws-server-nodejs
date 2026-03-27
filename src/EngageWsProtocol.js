@@ -1,15 +1,18 @@
 'use strict';
 
 /**
- * EngageRequest - Represents an HTTP-style request sent from the server to a gateway.
+ * EngageRequest
+ *
+ * An HTTP-style request sent from the server to a gateway over the WebSocket channel.
+ * The server (Genea Cloud) acts as the HTTP client; the gateway acts as the HTTP server.
  */
 class EngageRequest {
   /**
    * @param {number} requestId
-   * @param {string} requestMethod    e.g. "GET", "POST"
-   * @param {string} requestPath      e.g. "/gateway/scanList"
-   * @param {string} requestMessageBody
-   * @param {string} [requestOptionalStrings]
+   * @param {string} requestMethod            e.g. "GET", "PUT"
+   * @param {string} requestPath              e.g. "/edgeDevices/linkList"
+   * @param {string} requestMessageBody       JSON string or empty string
+   * @param {string} [requestOptionalStrings] Query string parameters
    */
   constructor(requestId, requestMethod, requestPath, requestMessageBody, requestOptionalStrings = '') {
     this.requestId = requestId;
@@ -19,21 +22,8 @@ class EngageRequest {
     this.requestOptionalStrings = requestOptionalStrings;
   }
 
-  debugPrint() {
-    console.log('@@@@@@@@@Request@@@@@@@@');
-    console.log('requestId:', this.requestId);
-    console.log('Request Method:', this.requestMethod);
-    console.log('Request Path:', this.requestPath);
-    console.log('Request Body:', this.requestMessageBody);
-    if (this.requestOptionalStrings) {
-      console.log('Request Optional Strings:', this.requestOptionalStrings);
-    }
-    console.log('@@@@@@@@@@@@@@@@@@@@@@@@');
-  }
-
-  /** Serialize to a JSON string (UTF-8 Buffer) suitable for sending over WebSocket. */
   createPayload() {
-    const request = {
+    const payload = {
       requestId: this.requestId,
       request: {
         method: this.requestMethod,
@@ -42,24 +32,32 @@ class EngageRequest {
       },
     };
     if (this.requestOptionalStrings) {
-      request.request.optionalQueryStrings = this.requestOptionalStrings;
+      payload.request.optionalQueryStrings = this.requestOptionalStrings;
     }
-    return JSON.stringify(request);
+    return JSON.stringify(payload);
   }
 
   logString() {
-    return `${this.requestId}, ${this.requestMethod}, ${this.requestPath}, ${this.requestMessageBody}, ${this.requestOptionalStrings}`;
+    return `[req ${this.requestId}] ${this.requestMethod} ${this.requestPath}`;
+  }
+
+  debugPrint() {
+    console.log(`[EngageRequest ${this.requestId}] ${this.requestMethod} ${this.requestPath}`);
+    if (this.requestMessageBody) console.log(`  body: ${this.requestMessageBody}`);
+    if (this.requestOptionalStrings) console.log(`  query: ${this.requestOptionalStrings}`);
   }
 }
 
 
 /**
- * EngageResponse - Represents a response received from a gateway.
+ * EngageResponse
+ *
+ * A response received from a gateway, correlated to an EngageRequest by requestId.
  */
 class EngageResponse {
   /**
    * @param {number} requestId
-   * @param {string} responseStatus   HTTP-style status code as string, e.g. "200"
+   * @param {string} responseStatus       HTTP-style status code, e.g. "200"
    * @param {string} responseMessageBody
    */
   constructor(requestId, responseStatus, responseMessageBody) {
@@ -68,22 +66,24 @@ class EngageResponse {
     this.responseMessageBody = responseMessageBody;
   }
 
-  debugPrint() {
-    console.log('========Response========');
-    console.log('requestId:', this.requestId);
-    console.log('Response Status:', this.responseStatus);
-    console.log('Response Body:', this.responseMessageBody);
-    console.log('========================');
+  logString() {
+    return `[res ${this.requestId}] status=${this.responseStatus}`;
   }
 
-  logString() {
-    return `${this.requestId}, ${this.responseStatus}, ${this.responseMessageBody}`;
+  debugPrint() {
+    console.log(`[EngageResponse ${this.requestId}] status=${this.responseStatus}`);
+    if (this.responseMessageBody) console.log(`  body: ${this.responseMessageBody}`);
   }
 }
 
 
 /**
- * EngageEventSubscription - Sent from server to gateway to configure event subscriptions.
+ * EngageEventSubscription
+ *
+ * Sent from the server to a gateway immediately after connection to configure
+ * which event sources the gateway should stream back.
+ *
+ * Must be re-sent after every reconnection — the gateway does not persist subscriptions.
  */
 class EngageEventSubscription {
   /**
@@ -101,21 +101,8 @@ class EngageEventSubscription {
     this.subEdgeDeviceBody = {};
   }
 
-  debugPrint() {
-    console.log('%%%Event Subscription%%%');
-    console.log('sub_id:', this.subscriptionId);
-    console.log('sub gateway source:', this.subGatewaySource);
-    console.log('sub gateway enabled:', this.subGatewayEnabled);
-    console.log('sub gateway body:', this.subGatewayBody);
-    console.log('sub edgedevice source:', this.subEdgeDeviceSource);
-    console.log('sub edgedevice enabled:', this.subEdgeDeviceEnabled);
-    console.log('sub edgedevice body:', this.subEdgeDeviceBody);
-    console.log('%%%%%%%%%%%%%%%%%%%%%%%%');
-  }
-
-  /** Serialize to a JSON string suitable for sending over WebSocket. */
   createPayload() {
-    const sub = {
+    return JSON.stringify({
       subscriptionId: this.subscriptionId,
       subscription: [
         {
@@ -129,24 +116,31 @@ class EngageEventSubscription {
           subscriptionBody: this.subEdgeDeviceBody,
         },
       ],
-    };
-    return JSON.stringify(sub);
+    });
   }
 
   logString() {
-    return `${this.subscriptionId}, ${this.subGatewayEnabled}, ${this.subEdgeDeviceEnabled}`;
+    return `[sub ${this.subscriptionId}] gateway=${this.subGatewayEnabled} edgeDevice=${this.subEdgeDeviceEnabled}`;
+  }
+
+  debugPrint() {
+    console.log(`[EngageEventSubscription ${this.subscriptionId}]`);
+    console.log(`  gateway=${this.subGatewayEnabled}  edgeDevice=${this.subEdgeDeviceEnabled}`);
   }
 }
 
 
 /**
- * EngageEvent - Represents an asynchronous event received from a gateway.
+ * EngageEvent
+ *
+ * An asynchronous event pushed from a gateway (e.g. badge read, door open, lock state change).
+ * Events are not correlated to any request — they arrive independently on the WebSocket.
  */
 class EngageEvent {
   /**
    * @param {number} eventId
    * @param {string} eventType
-   * @param {string} eventSource
+   * @param {string} eventSource    "gateway" | "edgeDevice"
    * @param {string} eventDeviceId
    * @param {string} eventBody
    */
@@ -158,18 +152,13 @@ class EngageEvent {
     this.eventBody = eventBody;
   }
 
-  debugPrint() {
-    console.log('*********Event**********');
-    console.log('eventId:', this.eventId);
-    console.log('Event Type:', this.eventType);
-    console.log('Event Source:', this.eventSource);
-    console.log('Event deviceId:', this.eventDeviceId);
-    console.log('Event Body:', this.eventBody);
-    console.log('************************');
+  logString() {
+    return `[event ${this.eventId}] type=${this.eventType} source=${this.eventSource} device=${this.eventDeviceId}`;
   }
 
-  logString() {
-    return `${this.eventId}, ${this.eventType}, ${this.eventSource}, ${this.eventDeviceId}, ${this.eventBody}`;
+  debugPrint() {
+    console.log(`[EngageEvent ${this.eventId}] type=${this.eventType} source=${this.eventSource} device=${this.eventDeviceId}`);
+    if (this.eventBody) console.log(`  body: ${JSON.stringify(this.eventBody)}`);
   }
 }
 

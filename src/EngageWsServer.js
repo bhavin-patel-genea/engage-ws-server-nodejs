@@ -3,58 +3,52 @@
 const fs = require('fs');
 const http = require('http');
 const https = require('https');
-const path = require('path');
 const EventEmitter = require('events');
 const WebSocket = require('ws');
 const express = require('express');
 const { validate } = require('jsonschema');
 
+const crypto = require('crypto');
 const { EngageRequest, EngageResponse, EngageEvent, EngageEventSubscription } = require('./EngageWsProtocol');
-const { createRoutes } = require('./routes');
+const { createRoutes, createCaRoutes } = require('./routes');
 const AsyncQueue = require('./AsyncQueue');
 
-const VERSION = '1.1';
-const MAX_MSG_ID = 1000000;
-const VALID_PROTOCOLS = ['engage.v1.gateway.allegion.com'];
-// NOTE (Best Practice — Schlage ENGAGE App Note v1.06, Page 16):
-// For servers that support the engage.v1.edgedevice.allegion.com sub-protocol,
-// the ping interval and missed-ping threshold must be tuned carefully.
-// A reader-controller can take up to 60s to process a 1000-user database,
-// during which time it will not respond to pings.
-//
-// Recommended safe values for edge device support:
-//   PING_INTERVAL_MS = 20000   (20 seconds)
-//   MAX_MISSED_PINGS = 3       → 60 seconds before forced disconnect
-//
-// Current values (5s × 3 = 15s) are suitable for gateway-only deployments
-// (engage.v1.gateway.allegion.com) but will prematurely disconnect
-// reader-controllers during large database operations.
-// Increase PING_INTERVAL_MS to 20000 if edge device support is required.
-const PING_INTERVAL_MS = 5000;
+const VERSION = '1.2';
+const MAX_MSG_ID = 1_000_000;
+
+// Both ENGAGE sub-protocols are supported (App Note v1.06, p.16).
+// For edge-device deployments, increase PING_INTERVAL_MS to 20 000 ms —
+// reader-controllers can take up to 60 s for large database operations.
+const VALID_PROTOCOLS = [
+  'engage.v1.gateway.allegion.com',
+  'engage.v1.edgedevice.allegion.com',
+];
+
+const PING_INTERVAL_MS = 5_000;
 const MAX_MISSED_PINGS = 3;
 
 
 /**
  * EngageWsServer
  *
- * Node.js port of the Python EngageWsServer + EngageWsServerProtocol classes.
  * Combines an Express HTTP server and a ws WebSocket server on the same port.
+ * Handles the full ENGAGE gateway lifecycle: credential establishment → WebSocket
+ * upgrade → event subscription → message routing → heartbeat → graceful shutdown.
  *
- * Usage:
- *   const server = new EngageWsServer({ onConnectionMade, onConnectionLost });
- *   server.startServer();   // blocks (keeps event loop alive)
+ * Extends EventEmitter and emits:
+ *   'gateway:connected'    (sn)
+ *   'gateway:disconnected' (sn)
+ *   'engage:event'         ({ sn, event: EngageEvent })
+ *
+ * @param {object}   options
+ * @param {function} [options.onConnectionMade]        Called with (sn) when a gateway connects
+ * @param {function} [options.onConnectionLost]        Called with (sn) when a gateway disconnects
+ * @param {string}   [options.serverConfigSchemaFile]
+ * @param {string}   [options.serverConfigFile]
+ * @param {string}   [options.eventSchemaFile]
+ * @param {string}   [options.responseSchemaFile]
  */
 class EngageWsServer extends EventEmitter {
-  /**
-   * @param {object}   options
-   * @param {function} [options.onConnectionMade]       Called with (sn) when a gateway connects
-   * @param {function} [options.onConnectionLost]       Called with (sn) when a gateway disconnects
-   * @param {string}   [options.serverConfigSchemaFile]
-   * @param {string}   [options.serverConfigFile]
-   * @param {string}   [options.eventSchemaFile]
-   * @param {string}   [options.responseSchemaFile]
-   * @param {string}   [options.logFile]
-   */
   constructor(options = {}) {
     super();
 
@@ -70,28 +64,27 @@ class EngageWsServer extends EventEmitter {
     this.onConnectionMade = onConnectionMade;
     this.onConnectionLost = onConnectionLost;
 
-    // State
     this.siteKeyFile = '';
+    this.rootCaFile = './config/rootca.der';
     this.port = 8080;
+    this.caServerPort = 8080;
     this.sslEnabled = false;
-    this.requestId = 1;
     this.subscriptionId = 1;
 
     /**
-     * validConnections: Map<sn:string, {
-     *   password: string,
-     *   connection: WebSocket|null,
-     *   connectionName: string,
-     *   responseQueue: AsyncQueue|null,
-     *   eventQueue: AsyncQueue|null,
+     * validConnections: Map<sn, {
+     *   password:         string,
+     *   connection:       WebSocket|null,
+     *   connectionName:   string,
+     *   pendingRequests:  Map<requestId, { resolve: Function, timer: NodeJS.Timeout|null }>,
+     *   eventQueue:       AsyncQueue|null,
      * }>
      */
     this.validConnections = new Map();
 
-    // Expose singleton for routes (mirrors Python's EngageWsServer.g_server)
     EngageWsServer.gServer = this;
 
-    // --- Load & validate server config ---
+    // Load and validate server config
     let configSchema;
     try {
       configSchema = JSON.parse(fs.readFileSync(serverConfigSchemaFile, 'utf8'));
@@ -111,20 +104,24 @@ class EngageWsServer extends EventEmitter {
       throw new Error(`Config JSON is malformed: ${result.errors.map(e => e.message).join('; ')}`);
     }
 
-    // Apply config values
     if (config.server_port) this.port = config.server_port;
     this.siteKeyFile = config.site_key_file;
+    if (config.root_ca_file) this.rootCaFile = config.root_ca_file;
 
     if (config.ssl_info.ssl_enabled) {
       this.sslEnabled = true;
       this.sslKey = config.ssl_info.ssl_key;
       this.sslCert = config.ssl_info.ssl_cert;
+      this.caServerPort = config.ca_server_port || 8080;
+    } else {
+      // Plain HTTP: CA routes share the main port
+      this.caServerPort = config.server_port || 8080;
     }
 
     this.gatewayEventsEnabled = config.event_subscription_info.gateway_events;
     this.edgeDeviceEventsEnabled = config.event_subscription_info.edgedevice_events;
 
-    // --- Load message validation schemas ---
+    // Load message validation schemas
     try {
       this.responseSchema = JSON.parse(fs.readFileSync(responseSchemaFile, 'utf8'));
       this.eventSchema = JSON.parse(fs.readFileSync(eventSchemaFile, 'utf8'));
@@ -132,11 +129,11 @@ class EngageWsServer extends EventEmitter {
       throw new Error(`Failed to load message schemas: ${e.message}`);
     }
 
-    // --- Set up Express app ---
+    // Express app with ENGAGE HTTP routes
     this.app = express();
     createRoutes(this.app, this);
 
-    // --- Create HTTP/HTTPS server ---
+    // HTTP/HTTPS server
     if (this.sslEnabled) {
       const sslOptions = {
         key: fs.readFileSync(this.sslKey),
@@ -147,10 +144,32 @@ class EngageWsServer extends EventEmitter {
       this.httpServer = http.createServer(this.app);
     }
 
-    // --- Create WebSocket server (noServer = we control the upgrade) ---
+    // TCP Keep-Alive: detect dead connections at the OS level (App Note v1.06)
+    this.httpServer.on('connection', (socket) => {
+      socket.setKeepAlive(true, 30_000);
+    });
+
+    // CA certificate server (Stage 1 of the gateway connection flow)
+    //
+    // When ssl_enabled is TRUE: the gateway cannot use HTTPS to download the
+    // root CA it needs to trust HTTPS — a plain HTTP server on a separate port
+    // is required. We spin it up here in the same process so a single
+    // `npm run demo` starts everything.
+    //
+    // When ssl_enabled is FALSE: CA routes are served on the main app (same
+    // port, same server) since there is no TLS bootstrap problem.
+    if (this.sslEnabled) {
+      const caApp = express();
+      createCaRoutes(caApp, this);
+      this.caHttpServer = http.createServer(caApp);
+    } else {
+      createCaRoutes(this.app, this);
+      this.caHttpServer = null;
+    }
+
+    // WebSocket server — upgrade requests are handled manually
     this.wss = new WebSocket.Server({ noServer: true });
 
-    // Route upgrade requests to the WebSocket path only
     this.httpServer.on('upgrade', (request, socket, head) => {
       const urlPath = request.url.split('?')[0];
       if (urlPath !== '/engage_wss') {
@@ -161,23 +180,24 @@ class EngageWsServer extends EventEmitter {
       this._handleUpgrade(request, socket, head);
     });
 
-    // Wire up accepted WebSocket connections
-    this.wss.on('connection', (ws, request) => {
+    this.wss.on('connection', (ws) => {
       this._setupConnection(ws);
     });
   }
 
-  // ─── Internal WebSocket Lifecycle ───────────────────────────────────────────
+  // ─── WebSocket Lifecycle ─────────────────────────────────────────────────────
 
   /**
    * Authenticate and upgrade an HTTP upgrade request to a WebSocket connection.
-   * Mirrors EngageWsServerProtocol.onConnect() in the Python code.
+   *
+   * Returns HTTP 401 on auth failures so the gateway firmware triggers a
+   * re-auth cycle (a 403 causes some versions to stop retrying).
    */
   _handleUpgrade(request, socket, head) {
     const authHeader = request.headers['authorization'];
     if (!authHeader) {
-      console.log('Client did not provide basic auth credentials!');
-      socket.write('HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n');
+      console.log('WebSocket upgrade rejected: missing Authorization header');
+      socket.write('HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n');
       socket.destroy();
       return;
     }
@@ -188,8 +208,8 @@ class EngageWsServer extends EventEmitter {
       : null;
 
     if (!base64Creds) {
-      console.log('The authorization was not in the correct format!');
-      socket.write('HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n');
+      console.log('WebSocket upgrade rejected: Authorization header is not Basic');
+      socket.write('HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n');
       socket.destroy();
       return;
     }
@@ -201,36 +221,44 @@ class EngageWsServer extends EventEmitter {
       if (colonIdx < 0) throw new Error('missing colon separator');
       sn = credStr.substring(0, colonIdx);
       password = credStr.substring(colonIdx + 1);
-    } catch (e) {
-      console.log('The authorization was not in the correct format!');
-      socket.write('HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n');
+    } catch {
+      console.log('WebSocket upgrade rejected: malformed Authorization header');
+      socket.write('HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n');
       socket.destroy();
       return;
     }
 
     const connectionName = `${socket.remoteAddress}:${socket.remotePort}`;
-    console.log(`Client connecting: ${connectionName}`);
+    console.log(`Gateway connecting: ${connectionName} (SN: ${sn})`);
 
     if (!this.credentialsAreValid(connectionName, sn, password)) {
-      console.log('The credentials are not valid!');
-      socket.write('HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n');
+      console.log(`WebSocket upgrade rejected: invalid credentials for SN ${sn}`);
+      socket.write('HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n');
       socket.destroy();
       return;
     }
 
-    // Validate WebSocket sub-protocol
+    // Duplicate connection guard: if the same gateway reconnects before the
+    // ping-timeout expires, close the stale socket and accept the new one.
+    const existing = this.validConnections.get(sn.toUpperCase());
+    if (existing?.connection?.readyState === WebSocket.OPEN) {
+      console.log(`Duplicate connection for SN ${sn.toUpperCase()} — closing stale socket`);
+      existing.connection.close(1000, 'Replaced by new connection from same gateway');
+    }
+
+    // Validate sub-protocol (400 = negotiation failure, not auth failure)
     const protocolHeader = request.headers['sec-websocket-protocol'] || '';
     const protocols = protocolHeader.split(',').map(p => p.trim()).filter(Boolean);
     const selectedProtocol = protocols.find(p => VALID_PROTOCOLS.includes(p));
 
     if (!selectedProtocol) {
-      console.log('Client did not advertise the correct protocol');
+      console.log(`WebSocket upgrade rejected: unsupported sub-protocol "${protocolHeader}"`);
       socket.write('HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n');
       socket.destroy();
       return;
     }
 
-    console.log(`Credentials valid - upgrading ${connectionName} with protocol ${selectedProtocol}`);
+    console.log(`Upgrading ${connectionName} → protocol: ${selectedProtocol}`);
 
     this.wss.handleUpgrade(request, socket, head, (ws) => {
       ws.connectionName = connectionName;
@@ -240,28 +268,24 @@ class EngageWsServer extends EventEmitter {
   }
 
   /**
-   * Wire up message/close/error handlers and start heartbeat for a new connection.
-   * Mirrors EngageWsServerProtocol.onOpen() in the Python code.
+   * Wire up message/close/error handlers and start the heartbeat for a new connection.
    */
   _setupConnection(ws) {
-    console.log(`WebSocket connection open: ${ws.connectionName}`);
+    console.log(`WebSocket open: ${ws.connectionName}`);
 
     ws.pingsSent = 0;
     ws.pongsReceived = 0;
     ws.isOpen = true;
 
-    ws.on('pong', () => {
-      ws.pongsReceived++;
-    });
+    ws.on('pong', () => { ws.pongsReceived++; });
 
-    // Heartbeat: send a ping every 5 seconds; drop after 3 missed pongs
     const pingTimer = setInterval(() => {
       if (!ws.isOpen) {
         clearInterval(pingTimer);
         return;
       }
       if (ws.pingsSent - ws.pongsReceived > MAX_MISSED_PINGS) {
-        console.log(`Too many pings missed, closing connection to ${ws.connectionName}`);
+        console.log(`Too many missed pings — closing ${ws.connectionName}`);
         clearInterval(pingTimer);
         ws.close(1000, 'Too many missed pings');
         return;
@@ -270,15 +294,12 @@ class EngageWsServer extends EventEmitter {
       ws.pingsSent++;
     }, PING_INTERVAL_MS);
 
-    ws.on('message', (data, isBinary) => {
-      this._onMessage(ws, data, isBinary);
-    });
+    ws.on('message', (data, isBinary) => { this._onMessage(ws, data, isBinary); });
 
     ws.on('close', (code, reason) => {
       ws.isOpen = false;
       clearInterval(pingTimer);
-      const reasonStr = reason ? reason.toString() : '';
-      console.log(`WebSocket connection closed: ${reasonStr}`);
+      console.log(`WebSocket closed: ${ws.connectionName} (${reason?.toString() || code})`);
       this._connectionLost(ws.connectionName);
     });
 
@@ -286,32 +307,29 @@ class EngageWsServer extends EventEmitter {
       console.error(`WebSocket error on ${ws.connectionName}: ${err.message}`);
     });
 
-    // Notify server-level logic and send initial event subscription
     this._connectionMade(ws.connectionName, ws);
   }
 
   /**
-   * Handle an incoming WebSocket message.
-   * Mirrors EngageWsServerProtocol.onMessage() in the Python code.
+   * Parse and route an incoming WebSocket message to either the response or event queue.
    */
   _onMessage(ws, data, isBinary) {
     if (isBinary) {
-      console.log(`Binary message received: ${data.length} bytes`);
+      console.log(`Binary message ignored (${data.length} bytes) from ${ws.connectionName}`);
       return;
     }
 
     const text = Buffer.isBuffer(data) ? data.toString('utf8') : data;
-    console.log(`Text message received: ${text}`);
+    console.log(`Message from ${ws.connectionName}: ${text}`);
 
     let msgJson;
     try {
       msgJson = JSON.parse(text);
-    } catch (e) {
-      console.log(`Non-JSON message received: ${text}`);
+    } catch {
+      console.log(`Non-JSON message discarded from ${ws.connectionName}`);
       return;
     }
 
-    // Try response schema first, then event schema
     const responseResult = validate(msgJson, this.responseSchema);
     if (responseResult.valid) {
       const responseObj = new EngageResponse(
@@ -319,7 +337,7 @@ class EngageWsServer extends EventEmitter {
         msgJson.response.status,
         msgJson.response.messageBody
       );
-      console.log(`Valid Protocol Response from ${ws.connectionName} received! ${responseObj.logString()}`);
+      console.log(`Response from ${ws.connectionName}: ${responseObj.logString()}`);
       this._handleResponse(ws.connectionName, responseObj);
       return;
     }
@@ -333,24 +351,31 @@ class EngageWsServer extends EventEmitter {
         msgJson.event.deviceId,
         msgJson.event.eventBody
       );
-      console.log(`Valid Protocol Event from ${ws.connectionName} received! ${eventObj.logString()}`);
+      console.log(`Event from ${ws.connectionName}: ${eventObj.logString()}`);
       this._handleEvent(ws.connectionName, eventObj);
       return;
     }
 
     console.log(
-      `Received JSON did not pass response or event schema validation. ` +
-      `Response errors: ${responseResult.errors.map(e => e.message).join(', ')}; ` +
-      `Event errors: ${eventResult.errors.map(e => e.message).join(', ')}`
+      `Message from ${ws.connectionName} failed schema validation — ` +
+      `response errors: ${responseResult.errors.map(e => e.message).join(', ')}; ` +
+      `event errors: ${eventResult.errors.map(e => e.message).join(', ')}`
     );
   }
 
-  // ─── Protocol-level Handlers (called by protocol logic) ─────────────────────
+  // ─── Internal Handlers ───────────────────────────────────────────────────────
 
   _handleResponse(connectionName, responseObj) {
-    for (const [sn, conn] of this.validConnections) {
+    for (const [, conn] of this.validConnections) {
       if (conn.connectionName === connectionName) {
-        conn.responseQueue.put(responseObj);
+        const pending = conn.pendingRequests.get(responseObj.requestId);
+        if (pending) {
+          clearTimeout(pending.timer);
+          conn.pendingRequests.delete(responseObj.requestId);
+          pending.resolve(responseObj);
+        } else {
+          console.log(`Response for unknown requestId ${responseObj.requestId} — discarded`);
+        }
         return;
       }
     }
@@ -360,6 +385,7 @@ class EngageWsServer extends EventEmitter {
     for (const [sn, conn] of this.validConnections) {
       if (conn.connectionName === connectionName) {
         conn.eventQueue.put(eventObj);
+        this.emit('engage:event', { sn, event: eventObj });
         return;
       }
     }
@@ -369,19 +395,19 @@ class EngageWsServer extends EventEmitter {
     for (const [sn, conn] of this.validConnections) {
       if (conn.connectionName === connectionName) {
         conn.connection = ws;
-        conn.responseQueue = new AsyncQueue();
+        conn.pendingRequests = new Map();
         conn.eventQueue = new AsyncQueue();
 
-        // Automatically send event subscription message
         const sub = new EngageEventSubscription(
           this._getNewSubscriptionId(),
           this.gatewayEventsEnabled,
           this.edgeDeviceEventsEnabled
         );
-        console.log('Sending subscription message');
+        console.log(`Sending event subscription to ${connectionName}`);
         this._sendWsMessage(ws, sub);
 
         this.onConnectionMade(sn);
+        this.emit('gateway:connected', sn);
         return;
       }
     }
@@ -390,24 +416,28 @@ class EngageWsServer extends EventEmitter {
   _connectionLost(connectionName) {
     for (const [sn, conn] of this.validConnections) {
       if (conn.connectionName === connectionName) {
-        // FIXME: Ideally keep credentials and just remove the active connection,
-        // so gateways can reconnect without going through credential establishment again.
+        // Resolve all in-flight requests with null so callers don't hang
+        if (conn.pendingRequests) {
+          for (const { resolve, timer } of conn.pendingRequests.values()) {
+            clearTimeout(timer);
+            resolve(null);
+          }
+          conn.pendingRequests.clear();
+        }
         this.validConnections.delete(sn);
         this.onConnectionLost(sn);
+        this.emit('gateway:disconnected', sn);
         return;
       }
     }
-    console.log('Connections list - could not find object to remove...');
+    console.log(`Connection lost but not found in registry: ${connectionName}`);
   }
 
-  /**
-   * Send an EngageRequest or EngageEventSubscription (or raw string) over a WebSocket.
-   */
   _sendWsMessage(ws, msg) {
     let payload;
     if (msg instanceof EngageRequest || msg instanceof EngageEventSubscription) {
       payload = msg.createPayload();
-      console.log(`Sending engage message: ${payload}`);
+      console.log(`Sending: ${payload}`);
     } else {
       payload = typeof msg === 'string' ? msg : JSON.stringify(msg);
     }
@@ -417,23 +447,24 @@ class EngageWsServer extends EventEmitter {
   // ─── Credential Management ───────────────────────────────────────────────────
 
   /**
-   * Register a new gateway credential after the newCredentials HTTP handshake.
+   * Register a gateway credential after a successful /engage/newCredentials handshake.
    * @param {string} sn        Serial number (uppercase)
    * @param {string} password  Base64-encoded random password
    */
   credentialsEstablished(sn, password) {
     this.validConnections.set(sn, {
       password,
-      connection: null,
-      connectionName: '',
-      responseQueue: null,
-      eventQueue: null,
+      connection:      null,
+      connectionName:  '',
+      pendingRequests: new Map(),
+      eventQueue:      null,
+      lastAuthAt:      new Date().toISOString(),   // updated on every 24-hour re-auth
     });
   }
 
   /**
    * Validate Basic Auth credentials from a WebSocket upgrade request.
-   * Side-effect: stores the connectionName on the matching entry.
+   * Side-effect: records the connectionName on the matching entry.
    *
    * @param {string} connectionName  e.g. "::1:54321"
    * @param {string} sn
@@ -451,10 +482,24 @@ class EngageWsServer extends EventEmitter {
 
   // ─── ID Generators ───────────────────────────────────────────────────────────
 
+  /**
+   * Generate a cryptographically random positive signed int32 request ID.
+   *
+   * Why not the full uint32 range?
+   *   The gateway firmware treats requestId as a signed 32-bit integer.
+   *   Values above 0x7FFFFFFF (2 147 483 647) are clamped to INT32_MAX in
+   *   the gateway's response, so the server never sees the real requestId
+   *   back and the pending Promise times out.
+   *
+   *   Masking with 0x7FFFFFFF keeps the random value in [0 … 2 147 483 647];
+   *   the `|| 1` ensures we never emit 0 (reserved as a sentinel by some
+   *   gateway firmware versions).
+   *
+   * Why not UUID?
+   *   The Allegion response schema mandates requestId is an integer.
+   */
   _getNewRequestId() {
-    const id = this.requestId++;
-    if (this.requestId >= MAX_MSG_ID) this.requestId = 0;
-    return id;
+    return (crypto.randomBytes(4).readUInt32BE(0) & 0x7FFFFFFF) || 1;
   }
 
   _getNewSubscriptionId() {
@@ -463,37 +508,42 @@ class EngageWsServer extends EventEmitter {
     return id;
   }
 
-  // ─── Public User API ─────────────────────────────────────────────────────────
+  // ─── Public API ──────────────────────────────────────────────────────────────
 
   /**
-   * Start the server. This call does not block in Node.js — the event loop keeps
-   * the process alive. Call this last after setting up any application logic.
-   *
-   * @param {string} [logFile]  Currently unused (console.log is used instead)
+   * Start the HTTP/WebSocket server.
+   * The Node.js event loop keeps the process alive after this call returns.
    */
-  startServer(logFile = './logs/EngageWSServer.log') {
+  startServer() {
     this.httpServer.listen(this.port, () => {
       const proto = this.sslEnabled ? 'wss' : 'ws';
-      console.log(`Starting Engage WS Server version ${VERSION}`);
-      console.log(`Listening on port ${this.port} (${proto}://host:${this.port}/engage_wss)`);
+      console.log(`ENGAGE WS Server v${VERSION} — port ${this.port} (${proto}://host:${this.port}/engage_wss)`);
+
+      if (this.caHttpServer) {
+        this.caHttpServer.listen(this.caServerPort, () => {
+          console.log(`CA cert server — port ${this.caServerPort} (http://host:${this.caServerPort}/engage/newCA/current)`);
+        });
+      } else {
+        console.log(`CA cert routes — mounted on main server port ${this.port}`);
+      }
     });
   }
 
-  /** Return the internal validConnections map (e.g. for HTTP endpoints). */
+  /** Return the internal validConnections map. */
   getConnections() {
     return this.validConnections;
   }
 
   /**
    * Send a message to a connected gateway.
-   * @param {string} connectionIndex  Serial number (the map key)
+   * @param {string} connectionIndex  Serial number (map key)
    * @param {EngageRequest|EngageEventSubscription|string} engageObj
    * @returns {0|-1}
    */
   sendMsg(connectionIndex, engageObj) {
     const conn = this.validConnections.get(connectionIndex);
-    if (!conn || !conn.connection) {
-      console.log(`Connection at index ${connectionIndex} does not exist!`);
+    if (!conn?.connection) {
+      console.log(`sendMsg: no connection for ${connectionIndex}`);
       return -1;
     }
     this._sendWsMessage(conn.connection, engageObj);
@@ -501,36 +551,42 @@ class EngageWsServer extends EventEmitter {
   }
 
   /**
-   * Get the number of pending responses for a connection.
-   * @param {string} connectionIndex
-   * @returns {number|null}
+   * Wait for the response to a specific request identified by its requestId.
+   *
+   * Each in-flight request is registered in conn.pendingRequests keyed by its
+   * unique random requestId. When _handleResponse receives a message from the
+   * gateway it resolves exactly the matching Promise — no FIFO ordering assumed,
+   * no cross-request interference regardless of how many concurrent callers exist.
+   *
+   * @param {string} sn           Gateway serial number
+   * @param {number} requestId    The requestId sent with the EngageRequest
+   * @param {number} [timeoutSec] Seconds to wait before resolving with null (default 10)
+   * @returns {Promise<EngageResponse|null>}
    */
-  getResponseQueueSize(connectionIndex) {
-    const conn = this.validConnections.get(connectionIndex);
-    return conn && conn.responseQueue ? conn.responseQueue.size() : null;
+  waitForResponse(sn, requestId, timeoutSec = 10) {
+    const conn = this.validConnections.get(sn);
+    if (!conn) return Promise.resolve(null);
+
+    return new Promise((resolve) => {
+      const timer = timeoutSec > 0
+        ? setTimeout(() => {
+            conn.pendingRequests.delete(requestId);
+            console.log(`Request ${requestId} to ${sn} timed out after ${timeoutSec}s`);
+            resolve(null);
+          }, timeoutSec * 1000)
+        : null;
+
+      conn.pendingRequests.set(requestId, { resolve, timer });
+    });
   }
 
   /**
-   * Retrieve a response from the queue.
-   * @param {string}  connectionIndex
-   * @param {boolean} [block=false]    If true, returns a Promise
-   * @param {number}  [timeout=0]      Seconds to wait (0 = indefinite)
-   * @returns {EngageResponse|null|Promise<EngageResponse|null>}
-   */
-  getResponseQueueItem(connectionIndex, block = false, timeout = 0) {
-    const conn = this.validConnections.get(connectionIndex);
-    if (!conn || !conn.responseQueue) return null;
-    return conn.responseQueue.get(block, timeout);
-  }
-
-  /**
-   * Get the number of pending events for a connection.
    * @param {string} connectionIndex
    * @returns {number|null}
    */
   getEventQueueSize(connectionIndex) {
     const conn = this.validConnections.get(connectionIndex);
-    return conn && conn.eventQueue ? conn.eventQueue.size() : null;
+    return conn?.eventQueue ? conn.eventQueue.size() : null;
   }
 
   /**
@@ -542,17 +598,55 @@ class EngageWsServer extends EventEmitter {
    */
   getEventQueueItem(connectionIndex, block = false, timeout = 0) {
     const conn = this.validConnections.get(connectionIndex);
-    if (!conn || !conn.eventQueue) return null;
+    if (!conn?.eventQueue) return null;
     return conn.eventQueue.get(block, timeout);
   }
 
-  /** Expose the ID generator for user applications that build requests. */
+  /** Expose the request ID generator for user applications that build requests. */
   getNewRequestId() {
     return this._getNewRequestId();
   }
+
+  /**
+   * Wait until a gateway with the given SN has an open WebSocket connection.
+   *
+   * Resolves true  immediately if the gateway is already connected.
+   * Resolves true  when a gateway:connected event fires for this SN (within timeoutMs).
+   * Resolves false if the timeout expires before the gateway reconnects.
+   *
+   * Primary use case: 24-hour re-authentication window.  The gateway closes the
+   * WebSocket, re-runs the credential handshake (~2–5 s), then reconnects.
+   * Callers that hold a user request can await this instead of returning an error.
+   *
+   * @param {string} sn          Gateway serial number (must match validConnections key — uppercase)
+   * @param {number} [timeoutMs] Maximum wait time in milliseconds (default 30 000)
+   * @returns {Promise<boolean>}
+   */
+  waitForGateway(sn, timeoutMs = 30_000) {
+    const conn = this.validConnections.get(sn);
+    if (conn?.connection?.readyState === 1 /* WebSocket.OPEN */) {
+      return Promise.resolve(true);
+    }
+
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.off('gateway:connected', onConnect);
+        resolve(false);
+      }, timeoutMs);
+
+      const onConnect = (connectedSn) => {
+        if (connectedSn === sn) {
+          clearTimeout(timer);
+          this.off('gateway:connected', onConnect);
+          resolve(true);
+        }
+      };
+
+      this.on('gateway:connected', onConnect);
+    });
+  }
 }
 
-// Singleton reference (mirrors Python's EngageWsServer.g_server class attribute)
 EngageWsServer.gServer = null;
 
 module.exports = EngageWsServer;
