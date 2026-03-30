@@ -27,13 +27,16 @@
 
 const crypto    = require('crypto');
 const http      = require('http');
+const https     = require('https');
 const fs        = require('fs');
 const path      = require('path');
 const WebSocket = require('ws');
 
 // ── Configuration ─────────────────────────────────────────────────────────────
+const config      = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'config', 'config.json'), 'utf8'));
 const SERVER_HOST   = '127.0.0.1';
-const SERVER_PORT   = 8999;
+const SERVER_PORT   = config.server_port || 8999;
+const SSL_ENABLED   = config.ssl_info?.ssl_enabled === true;
 const SITE_KEY_FILE = path.join(__dirname, '..', 'config', 'sitekey');
 
 const SERIAL_NUMBER = process.argv[2]
@@ -86,7 +89,9 @@ function postNewCredentials(siteKey, sn) {
         'Content-Length' : Buffer.byteLength(body),
       },
     };
-    const req = http.request(opts, (res) => {
+    if (SSL_ENABLED) opts.rejectUnauthorized = false; // self-signed cert
+    const transport = SSL_ENABLED ? https : http;
+    const req = transport.request(opts, (res) => {
       let data = '';
       res.on('data', c => { data += c; });
       res.on('end', () => {
@@ -219,7 +224,9 @@ async function main() {
   console.log('  ENGAGE Gateway Simulator');
   console.log('═'.repeat(60));
   console.log(`  Serial  : ${SERIAL_NUMBER}`);
-  console.log(`  Server  : ws://${SERVER_HOST}:${SERVER_PORT}/engage_wss`);
+  const protocol = SSL_ENABLED ? 'wss' : 'ws';
+  console.log(`  Server  : ${protocol}://${SERVER_HOST}:${SERVER_PORT}/engage_wss`);
+  console.log(`  TLS     : ${SSL_ENABLED ? 'enabled (self-signed)' : 'disabled'}`);
   console.log('');
 
   // Load sitekey
@@ -246,10 +253,12 @@ async function main() {
   // Phase 2 — WebSocket upgrade
   console.log('[2/3] WebSocket upgrade ...');
   const authB64 = Buffer.from(`${SERIAL_NUMBER}:${password}`, 'utf8').toString('base64');
+  const wsOpts = { headers: { Authorization: `Basic ${authB64}` } };
+  if (SSL_ENABLED) wsOpts.rejectUnauthorized = false; // self-signed cert
   const ws = new WebSocket(
-    `ws://${SERVER_HOST}:${SERVER_PORT}/engage_wss`,
+    `${protocol}://${SERVER_HOST}:${SERVER_PORT}/engage_wss`,
     ['engage.v1.gateway.allegion.com'],
-    { headers: { Authorization: `Basic ${authB64}` } }
+    wsOpts
   );
 
   ws.on('open', () => {

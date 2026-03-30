@@ -107,11 +107,13 @@ class EngageWsServer extends EventEmitter {
     if (config.server_port) this.port = config.server_port;
     this.siteKeyFile = config.site_key_file;
     if (config.root_ca_file) this.rootCaFile = config.root_ca_file;
+    this.publicHostname = config.public_hostname || null;
 
     if (config.ssl_info.ssl_enabled) {
       this.sslEnabled = true;
       this.sslKey = config.ssl_info.ssl_key;
       this.sslCert = config.ssl_info.ssl_cert;
+      this.sslCa = config.ssl_info.ssl_ca || null;
       this.caServerPort = config.ca_server_port || 8080;
     } else {
       // Plain HTTP: CA routes share the main port
@@ -139,6 +141,9 @@ class EngageWsServer extends EventEmitter {
         key: fs.readFileSync(this.sslKey),
         cert: fs.readFileSync(this.sslCert),
       };
+      if (this.sslCa) {
+        sslOptions.ca = fs.readFileSync(this.sslCa);
+      }
       this.httpServer = https.createServer(sslOptions, this.app);
     } else {
       this.httpServer = http.createServer(this.app);

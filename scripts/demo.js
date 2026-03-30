@@ -53,12 +53,16 @@ const express = require('express');
 const EngageWsServer = require('../src/EngageWsServer');
 const { EngageRequest } = require('../src/EngageWsProtocol');
 const { lookupEvent, buildReason } = require('../src/eventCodes');
+const AuditStore = require('../src/AuditStore');
+const ConnectionTracker = require('../src/ConnectionTracker');
+const log = require('../src/logger');
 
 // ── State ──────────────────────────────────────────────────────────────────────
 
 const gateways = new Map(); // sn → { sn, connectedAt }
 const devices = new Map(); // sn → [{ linkId, deviceName, modelType, lockState }]
-const eventLog = [];        // recent ENGAGE events (capped at 200)
+const auditStore = new AuditStore('./data/audits.json', 48);     // 48-hour retention
+const connectionTracker = new ConnectionTracker('./data/connections.json');
 const sseClients = new Set(); // active SSE response objects
 
 // ── SSE broadcast ──────────────────────────────────────────────────────────────
@@ -74,13 +78,29 @@ function broadcast(eventName, data) {
 
 async function onGatewayConnected(sn) {
   const conn = server.getConnections().get(sn);
+  const isReAuth = conn?.lastAuthAt != null;
+  const authType = isReAuth ? 'reauth' : 'first';
+
+  // Track reconnection timing
+  const { gapSeconds } = connectionTracker.recordConnect(sn, authType);
+
   gateways.set(sn, {
     sn,
     connectedAt: new Date().toISOString(),
     lastAuthAt:  conn?.lastAuthAt || null,
+    reconnectionGap: gapSeconds,
   });
-  broadcast('gateway:connected', gateways.get(sn));
-  console.log(`[dashboard] Gateway connected: ${sn}`);
+
+  // Broadcast with reconnection info
+  const gatewayData = gateways.get(sn);
+  broadcast('gateway:connected', gatewayData);
+
+  if (gapSeconds !== null) {
+    log.reconnectionGap(sn, gapSeconds, authType);
+    broadcast('reconnection:gap', { sn, gapSeconds, authType });
+  }
+
+  console.log(`[dashboard] Gateway connected: ${sn}${gapSeconds !== null ? ` (reconnect gap: ${gapSeconds.toFixed(2)}s)` : ''}`);
 
   await discoverDevices(sn).catch(err =>
     console.error(`[dashboard] Device discovery failed for ${sn}: ${err.message}`)
@@ -88,6 +108,9 @@ async function onGatewayConnected(sn) {
 }
 
 function onGatewayDisconnected(sn) {
+  // Track disconnect timing
+  connectionTracker.recordDisconnect(sn);
+
   gateways.delete(sn);
   devices.delete(sn);
   broadcast('gateway:disconnected', { sn });
@@ -226,8 +249,7 @@ server.on('engage:event', ({ sn, event }) => {
     }
   }
 
-  eventLog.unshift(entry);
-  if (eventLog.length > 200) eventLog.pop();
+  auditStore.insert(entry);
   broadcast('engage:event', entry);
 });
 
@@ -253,7 +275,9 @@ app.get('/api/stream', (req, res) => {
     port: server.port,
     gateways: Array.from(gateways.values()),
     devices: Object.fromEntries(devices),
-    events: eventLog.slice(0, 50),
+    events: auditStore.getAll(50),
+    connectionStats: connectionTracker.getStats(),
+    reconnectionHistory: connectionTracker.getReconnectionHistory(null, 10),
   };
   res.write(`event: init\ndata: ${JSON.stringify(initPayload)}\n\n`);
 
@@ -332,17 +356,72 @@ app.post('/api/lock', parseJsonBody, async (req, res) => {
   res.json({ status: response.responseStatus, body: response.responseMessageBody });
 });
 
+// GET /api/audits — Query persistent audit log (48h retention)
+app.get('/api/audits', (req, res) => {
+  const { sn, since, limit } = req.query;
+  const sinceDate = since ? new Date(since) : null;
+  const entries = auditStore.query(sn || null, sinceDate, parseInt(limit) || 100);
+  res.json({
+    entries,
+    stats: auditStore.getStats(),
+  });
+});
+
+// GET /api/connections — Reconnection gap history and stats
+app.get('/api/connections', (req, res) => {
+  const { sn, limit } = req.query;
+  res.json({
+    history: connectionTracker.getReconnectionHistory(sn || null, parseInt(limit) || 20),
+    average: connectionTracker.getAverageGap(sn || null),
+    events: connectionTracker.getEvents(sn || null, 50),
+    stats: connectionTracker.getStats(),
+  });
+});
+
+// POST /api/test/disconnect/:sn — Force-close gateway WebSocket (simulates 24h drop)
+// WARNING: For development/testing ONLY. The gateway will detect the close,
+// re-authenticate (Stage 2), upgrade (Stage 3), and re-subscribe (Stage 4) —
+// identical to the real 24-hour lifecycle.
+app.post('/api/test/disconnect/:sn', (req, res) => {
+  const sn = req.params.sn.toUpperCase();
+  const conn = server.getConnections().get(sn);
+
+  if (!conn?.connection) {
+    return res.status(404).json({ error: `Gateway ${sn} not connected` });
+  }
+
+  if (conn.connection.readyState !== 1 /* WebSocket.OPEN */) {
+    return res.status(409).json({ error: `Gateway ${sn} connection not open (state: ${conn.connection.readyState})` });
+  }
+
+  console.log(`[test] Force-closing WebSocket for ${sn} to simulate 24h disconnect`);
+  log.info('test:force-disconnect', { sn, reason: 'Simulated 24-hour lifecycle drop' });
+
+  conn.connection.close(1000, 'Test: simulated 24-hour disconnect');
+
+  res.json({
+    status: 'disconnected',
+    sn,
+    message: `Gateway ${sn} WebSocket closed. Gateway should re-authenticate and reconnect within 2-5 seconds.`,
+    tip: 'Monitor /api/connections to see the reconnection gap timing.',
+  });
+});
+
 // ── Start ──────────────────────────────────────────────────────────────────────
 
 server.startServer();
 
 console.log('');
-console.log('  ┌─────────────────────────────────────────────────┐');
-console.log('  │         ENGAGE Gateway Dashboard                │');
-console.log('  ├─────────────────────────────────────────────────┤');
-console.log(`  │  Dashboard  →  http://localhost:${server.port}`.padEnd(52) + '│');
-console.log(`  │  Gateway WS →  ws://localhost:${server.port}/engage_wss`.padEnd(52) + '│');
-console.log('  ├─────────────────────────────────────────────────┤');
-console.log('  │  Simulator  →  node scripts/gateway-simulator.js│');
-console.log('  └─────────────────────────────────────────────────┘');
+console.log('  ┌──────────────────────────────────────────────────────┐');
+console.log('  │         ENGAGE Gateway Dashboard                     │');
+console.log('  ├──────────────────────────────────────────────────────┤');
+console.log(`  │  Dashboard     →  http://localhost:${server.port}`.padEnd(57) + '│');
+console.log(`  │  Gateway WS    →  ws://localhost:${server.port}/engage_wss`.padEnd(57) + '│');
+console.log('  ├──────────────────────────────────────────────────────┤');
+console.log(`  │  Audit Log     →  GET /api/audits (48h retention)`.padEnd(57) + '│');
+console.log(`  │  Connections   →  GET /api/connections`.padEnd(57) + '│');
+console.log(`  │  Test Disconnect→ POST /api/test/disconnect/:sn`.padEnd(57) + '│');
+console.log('  ├──────────────────────────────────────────────────────┤');
+console.log('  │  Simulator     →  node scripts/gateway-simulator.js  │');
+console.log('  └──────────────────────────────────────────────────────┘');
 console.log('');

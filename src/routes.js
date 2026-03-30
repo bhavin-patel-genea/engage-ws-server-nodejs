@@ -252,7 +252,8 @@ function createCaRoutes(app, server) {
     // Build the cert download URL pointing back at this same server (Stage 1b).
     // Plain HTTP is intentional — the gateway cannot use HTTPS until after
     // it has installed this CA cert and trusts the server's TLS certificate.
-    const certUrl = `http://${req.hostname}:${server.caServerPort}/engage/certificates`;
+    const hostname = server.publicHostname || req.hostname;
+    const certUrl = `http://${hostname}:${server.caServerPort}/engage/certificates`;
 
     console.log(`CA response: cert_url=${certUrl}`);
     res.json({ cert_url: certUrl, hash });

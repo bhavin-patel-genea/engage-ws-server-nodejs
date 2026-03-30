@@ -519,15 +519,33 @@
 
   </div>
 
-  <!-- ── Right: Event detail ───────────────────────────────────────────────── -->
+  <!-- ── Right: Event detail + Connection stats ───────────────────────────── -->
   <div class="right">
     <div class="section-header">
       Event Detail
     </div>
-    <div class="detail-panel" id="detail-panel">
+    <div class="detail-panel" id="detail-panel" style="flex:1;min-height:0">
       <div class="detail-empty">
         Select an event from the stream to see its full payload.
       </div>
+    </div>
+
+    <!-- Connection / Reconnection stats -->
+    <div class="section-header" style="border-top:1px solid var(--border)">
+      Reconnection History
+      <span class="badge-count" id="reconnect-count">0</span>
+    </div>
+    <div style="flex:0 0 auto;max-height:200px;overflow-y:auto;padding:8px 12px" id="reconnect-panel">
+      <div class="detail-empty" style="padding:12px">
+        No reconnections recorded yet.<br>
+        <span style="font-size:10px;color:var(--text-muted)">
+          Gateway disconnects every 24h. Gaps are tracked here.
+          <br>Test: <code>POST /api/test/disconnect/:sn</code>
+        </span>
+      </div>
+    </div>
+    <div id="reconnect-stats" style="flex-shrink:0;padding:6px 12px;border-top:1px solid var(--border);font-size:11px;color:var(--text-muted)">
+      Avg gap: — &nbsp;|&nbsp; Audit retention: 48h
     </div>
   </div>
 
@@ -546,6 +564,8 @@ const state = {
   devices:  {},
   events:   [],   // [{ sn, eventType, category, title, result, reason, source, deviceId, body, timestamp }]
   filter:   'all',
+  connectionStats: null,
+  reconnectionHistory: [],
 };
 
 // ── SSE connection ────────────────────────────────────────────────────────────
@@ -556,20 +576,35 @@ sse.addEventListener('init', e => {
   state.gateways = data.gateways || [];
   state.devices  = data.devices  || {};
   state.events   = data.events   || [];
+  state.connectionStats = data.connectionStats || null;
+  state.reconnectionHistory = data.reconnectionHistory || [];
 
   document.getElementById('server-label').textContent =
     `ws://localhost — port ${data.port || ''}`;
 
   renderAll();
+  renderReconnections();
 });
 
 sse.addEventListener('gateway:connected', e => {
-  const { sn, connectedAt } = JSON.parse(e.data);
+  const data = JSON.parse(e.data);
+  const { sn, connectedAt, reconnectionGap } = data;
   if (!state.gateways.find(g => g.sn === sn)) {
     state.gateways.push({ sn, connectedAt });
   }
-  addEvent({ eventType: null, category: 'Gateway', title: 'Gateway Connected', result: 'info', reason: '', source: 'server', deviceId: '', body: '', timestamp: connectedAt, sn });
+  const reason = reconnectionGap !== null && reconnectionGap !== undefined
+    ? `Reconnected after ${reconnectionGap.toFixed(2)}s`
+    : '';
+  addEvent({ eventType: null, category: 'Gateway', title: 'Gateway Connected', result: 'info', reason, source: 'server', deviceId: '', body: '', timestamp: connectedAt, sn });
   renderGateways();
+});
+
+sse.addEventListener('reconnection:gap', e => {
+  const data = JSON.parse(e.data);
+  state.reconnectionHistory.unshift(data);
+  if (state.reconnectionHistory.length > 50) state.reconnectionHistory.pop();
+  renderReconnections();
+  showToast(`Gateway ${data.sn} reconnected in ${data.gapSeconds.toFixed(2)}s`, 'success', 5000);
 });
 
 sse.addEventListener('gateway:disconnected', e => {
@@ -735,6 +770,46 @@ function addEvent(ev) {
   state.events.unshift(ev);
   if (state.events.length > 200) state.events.pop();
   renderEvents();
+}
+
+// ── Reconnection history panel ────────────────────────────────────────────────
+
+function renderReconnections() {
+  const panel = document.getElementById('reconnect-panel');
+  const countEl = document.getElementById('reconnect-count');
+  const statsEl = document.getElementById('reconnect-stats');
+  const history = state.reconnectionHistory;
+
+  countEl.textContent = history.length;
+
+  if (history.length === 0) {
+    panel.innerHTML = `<div class="detail-empty" style="padding:12px">
+      No reconnections recorded yet.<br>
+      <span style="font-size:10px;color:var(--text-muted)">
+        Gateway disconnects every 24h. Gaps are tracked here.
+        <br>Test: <code>POST /api/test/disconnect/:sn</code>
+      </span>
+    </div>`;
+    statsEl.textContent = 'Avg gap: — | Audit retention: 48h';
+    return;
+  }
+
+  panel.innerHTML = history.slice(0, 20).map(g => {
+    const gapColor = g.gapSeconds < 5 ? 'var(--green)' : g.gapSeconds < 15 ? 'var(--yellow)' : 'var(--red)';
+    const authLabel = g.authType === 'reauth' ? '24h re-auth' : g.authType;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(45,55,72,.4);font-size:11px">
+      <span style="color:${gapColor};font-weight:700;min-width:60px">${g.gapSeconds.toFixed(2)}s</span>
+      <span style="color:var(--text-muted);flex:1">${esc(g.sn)}</span>
+      <span class="cat-pill">${authLabel}</span>
+      <span style="color:var(--text-muted);font-size:10px">${fmtTimestamp(g.reconnectedAt || g.disconnectedAt)}</span>
+    </div>`;
+  }).join('');
+
+  // Stats
+  const avg = history.reduce((s, g) => s + g.gapSeconds, 0) / history.length;
+  const min = Math.min(...history.map(g => g.gapSeconds));
+  const max = Math.max(...history.map(g => g.gapSeconds));
+  statsEl.innerHTML = `Avg: <b>${avg.toFixed(2)}s</b> &nbsp;|&nbsp; Min: ${min.toFixed(2)}s &nbsp;|&nbsp; Max: ${max.toFixed(2)}s &nbsp;|&nbsp; Audit retention: 48h`;
 }
 
 // ── Lock action ───────────────────────────────────────────────────────────────
