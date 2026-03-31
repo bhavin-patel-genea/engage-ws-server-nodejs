@@ -17,6 +17,7 @@ const VERSION = '1.2';
 const MAX_MSG_ID = 1_000_000;
 
 // Both ENGAGE sub-protocols are supported (App Note v1.06, p.16).
+// Production default: 15 s ping interval with 3 missed pongs tolerated.
 // For edge-device deployments, increase PING_INTERVAL_MS to 20 000 ms —
 // reader-controllers can take up to 60 s for large database operations.
 const VALID_PROTOCOLS = [
@@ -24,7 +25,7 @@ const VALID_PROTOCOLS = [
   'engage.v1.edgedevice.allegion.com',
 ];
 
-const PING_INTERVAL_MS = 5_000;
+const PING_INTERVAL_MS = 15_000;
 const MAX_MISSED_PINGS = 3;
 
 
