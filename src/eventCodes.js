@@ -64,10 +64,14 @@ const CODES = {
   0x0201: { category: 'BLE',       title: 'BLE App Disconnected',          result: 'info'    },
 
   // ── Database (0x0600) ─────────────────────────────────────────────────────
-  0x0600: { category: 'Database',  title: 'Database Update Complete',      result: 'info'    },
-  0x0601: { category: 'Database',  title: 'Database Corrupt',              result: 'alert'   },
-  0x0602: { category: 'Database',  title: 'Partial Database Download',     result: 'warning' },
-  0x0603: { category: 'Database',  title: 'Database Partial Update',       result: 'warning' },
+  0x0600: { category: 'Database',  title: 'Database Error',                result: 'warning' },
+  0x0601: { category: 'Database',  title: 'Doorfile Update Successful',   result: 'info'    },
+  0x0602: { category: 'Database',  title: 'Start Audit Upload',            result: 'info'    },
+  0x0603: { category: 'Database',  title: 'Database Sort Status',          result: 'info'    },
+  0x0604: { category: 'Database',  title: 'User Database Corrupt',         result: 'alert'   },
+  0x0605: { category: 'Database',  title: 'Unread Audits Overwritten',     result: 'warning' },
+  0x0606: { category: 'Database',  title: 'Doorfile Partial Database Download', result: 'warning' },
+  0x0607: { category: 'Database',  title: 'Doorfile Partial Database Download Fault', result: 'warning' },
 
   // ── Firmware / System (0x0800) ────────────────────────────────────────────
   0x0800: { category: 'Firmware',  title: 'Lock Programmed',               result: 'info'    },
@@ -118,6 +122,25 @@ const SCHEDULE_DATA = {
 const WS_STATUS_DATA = {
   1: 'WS Host Connected',
   2: 'WS Host Disconnected',
+};
+
+const DATABASE_STATUS_DATA = {
+  0x0601: {
+    0: 'Database download and Audit upload',
+  },
+  0x0603: {
+    0: 'Database Presorted',
+    1: 'Database Not Presorted',
+    255: 'Unknown Database Presorting',
+  },
+  0x0605: {
+    0: 'Device',
+    1: 'Gateway',
+  },
+  0x0607: {
+    0: 'Out of Order',
+    1: 'Timeout',
+  },
 };
 
 /**
@@ -186,6 +209,7 @@ function buildReason(eventType, eventBody) {
 
   if (code === 0x0517 || code === 0x0518) return SCHEDULE_DATA[data] || '';
   if (code === 0x1204) return WS_STATUS_DATA[data] || '';
+  if (DATABASE_STATUS_DATA[code]) return DATABASE_STATUS_DATA[code][data] || '';
   if (code === 0x0102 || code === 0x0104) {
     const level = body.batteryLevel ?? body.level ?? body.voltage;
     return level !== undefined ? String(level) : '';
