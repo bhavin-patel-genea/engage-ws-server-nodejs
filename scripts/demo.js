@@ -283,8 +283,8 @@ async function discoverDevices(sn) {
 
   let rawList = [];
   try {
-    const body = JSON.parse(linkRes.responseMessageBody);
-    rawList = body.edgeDeviceLinkList || body.linkList || (Array.isArray(body) ? body : []);
+    const body = parseJsonSafe(linkRes.responseMessageBody);
+    rawList = body?.edgeDeviceLinkList || body?.linkList || (Array.isArray(body) ? body : []);
   } catch {
     console.log(`[dashboard] Could not parse linkList response for ${sn}`);
     return;
@@ -301,8 +301,8 @@ async function discoverDevices(sn) {
   const statusRes = await request(sn, 'GET', '/edgeDevices/lockStatus', '', 15);
   if (statusRes?.responseStatus === '200') {
     try {
-      const body = JSON.parse(statusRes.responseMessageBody);
-      const statusList = body.edgeDeviceLockStatus || body.lockStatus || [];
+      const body = parseJsonSafe(statusRes.responseMessageBody);
+      const statusList = body?.edgeDeviceLockStatus || body?.lockStatus || [];
       const stateMap = Object.fromEntries(statusList.map(s => [s.linkId, s.lockState || '?']));
       deviceList.forEach(d => { if (stateMap[d.linkId]) d.lockState = stateMap[d.linkId]; });
     } catch { /* enrichment is optional */ }
@@ -347,6 +347,20 @@ const server = new EngageWsServer({
 
 // Forward gateway events to SSE clients, enriched with human-readable metadata
 server.on('engage:event', ({ sn, event }) => {
+  // ── Detailed event log ──────────────────────────────────────────────────────
+  const ts = new Date().toISOString();
+  const rawBodyStr = typeof event.eventBody === 'string'
+    ? event.eventBody
+    : JSON.stringify(event.eventBody);
+  console.log(`\n╔══ GW EVENT [${ts}] ══════════════════════════════════`);
+  console.log(`║  Gateway SN : ${sn}`);
+  console.log(`║  Event ID   : ${event.eventId}`);
+  console.log(`║  Event Type : ${event.eventType}`);
+  console.log(`║  Source     : ${event.eventSource}`);
+  console.log(`║  Device ID  : ${event.eventDeviceId || '—'}`);
+  console.log(`║  Body       : ${rawBodyStr}`);
+  console.log(`╚═══════════════════════════════════════════════════════`);
+
   // Parse the event body — the gateway wraps audit events inside
   // body.edgeDevice.audits[] or body.gateway.audits[]
   let body = {};
@@ -359,6 +373,22 @@ server.on('engage:event', ({ sn, event }) => {
   const container = body.edgeDevice || body.gateway || {};
   const audits = Array.isArray(container.audits) ? container.audits : [];
   const firstAudit = audits[0] || {};
+
+  // Log decoded audit info
+  const linkId0 = container.linkId || event.eventDeviceId || '—';
+  if (audits.length > 0) {
+    audits.forEach((a, i) => {
+      const lk = lookupEvent(a.event || event.eventType);
+      console.log(`  audit[${i}]: ${a.event || '—'}  →  ${lk.title} (${lk.result})  time=${a.time || '—'}`);
+    });
+  } else {
+    const lk = lookupEvent(event.eventType);
+    console.log(`  (no audits array) eventType=${event.eventType}  →  ${lk.title} (${lk.result})`);
+  }
+  if (container.credentialReport?.length) {
+    console.log(`  credentialReport: ${JSON.stringify(container.credentialReport)}`);
+  }
+  console.log(`  linkId: ${linkId0}  |  audits: ${audits.length}`);
 
   if (audits.length > 1) {
     const sourceKey = body.edgeDevice ? 'edgeDevice' : (body.gateway ? 'gateway' : null);

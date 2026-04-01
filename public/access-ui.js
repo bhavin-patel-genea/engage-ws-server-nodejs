@@ -1067,8 +1067,7 @@
     renderAll,
   };
 
-  document.addEventListener('DOMContentLoaded', () => {
-    bindEvents();
-    ensureSelection();
-  });
+  // Script loads after DOM is ready (at end of body), so call immediately
+  bindEvents();
+  ensureSelection();
 })();
