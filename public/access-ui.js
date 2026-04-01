@@ -591,13 +591,17 @@
       return;
     }
 
-    box.innerHTML = items.slice(0, 10).map(item => `
+    box.innerHTML = items.slice(0, 10).map(item => {
+      const cardInfo = item.presentedCardNumber
+        ? `<div class="swipe-card" style="font-size:10px;color:var(--text-muted);margin-top:2px">Card: ${esc(item.presentedCardNumber)}${item.decodedCredential?.facilityCode ? ` | FC: ${esc(item.decodedCredential.facilityCode)}` : ''}</div>`
+        : '';
+      return `
       <div class="swipe-item ${esc(item.result || 'info')}">
         <div class="swipe-result">${esc((item.result || 'info').toUpperCase())}</div>
-        <div class="swipe-text">${esc(item.friendlyText || item.title || 'Access event')}</div>
+        <div class="swipe-text">${esc(item.friendlyText || item.title || 'Access event')}${cardInfo}</div>
         <div class="swipe-time">${esc(fmtTimestamp(item.timestamp))}</div>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
   }
 
   function renderAll() {

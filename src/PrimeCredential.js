@@ -223,6 +223,75 @@ function generatePrimeCredential(options) {
   };
 }
 
+function decryptPrimeClear(encryptedHex, siteKeyHexOrBuffer) {
+  const siteKey = loadSiteKey(siteKeyHexOrBuffer);
+  const encBuf = Buffer.from(String(encryptedHex).trim(), 'hex');
+  if (encBuf.length !== 16) return null;
+  const decipher = crypto.createDecipheriv('aes-256-cbc', siteKey, Buffer.alloc(16, 0));
+  decipher.setAutoPadding(false);
+  return Buffer.concat([decipher.update(encBuf), decipher.final()]);
+}
+
+function extractBits(clearBuffer, startBit, bitCount) {
+  if (!bitCount || bitCount <= 0) return 0n;
+  let value = 0n;
+  for (let i = 0; i < bitCount; i++) {
+    const byteIdx = Math.floor((startBit + i) / 8);
+    const bitIdx = 7 - ((startBit + i) % 8);
+    if (byteIdx < clearBuffer.length && (clearBuffer[byteIdx] >> bitIdx) & 1) {
+      value |= 1n << BigInt(bitCount - 1 - i);
+    }
+  }
+  return value;
+}
+
+function decodeCardFromClearBytes(clearBuffer, format) {
+  const payload = format?.payload;
+  if (!payload || !payload.total_card_bits) return null;
+
+  const totalBits = Number(payload.total_card_bits);
+
+  const buf = Buffer.from(clearBuffer);
+  if (payload.is_reversal_of_bytes) {
+    buf.reverse();
+  }
+
+  const cardNumber = extractBits(buf,
+    Number(payload.cardholder_id_start_bit || 0),
+    Number(payload.total_cardholder_id_bits || 0));
+
+  const facilityCode = Number(payload.total_facility_code_bits || 0) > 0
+    ? extractBits(buf,
+        Number(payload.facility_code_start_bit || 0),
+        Number(payload.total_facility_code_bits || 0))
+    : null;
+
+  const offset = BigInt(payload.offset || 0);
+  const adjustedCard = cardNumber >= offset ? cardNumber - offset : cardNumber;
+
+  return {
+    cardNumber: adjustedCard.toString(),
+    facilityCode: facilityCode !== null ? facilityCode.toString() : null,
+    formatLabel: format.label || format.value,
+    totalBits,
+  };
+}
+
+function decryptCredentialReport(credHex, siteKeyHexOrBuffer, formats) {
+  if (!credHex || !siteKeyHexOrBuffer) return null;
+  const clearBuffer = decryptPrimeClear(credHex, siteKeyHexOrBuffer);
+  if (!clearBuffer) return null;
+
+  for (const format of (formats || [])) {
+    try {
+      const decoded = decodeCardFromClearBytes(clearBuffer, format);
+      if (decoded && decoded.cardNumber !== '0') return decoded;
+    } catch { /* try next format */ }
+  }
+
+  return { cardNumber: null, facilityCode: null, clearHex: clearBuffer.toString('hex') };
+}
+
 function maskCardNumber(cardNumber) {
   const digits = String(cardNumber ?? '').trim();
   if (digits.length <= 4) return digits;
@@ -231,6 +300,7 @@ function maskCardNumber(cardNumber) {
 
 module.exports = {
   generatePrimeCredential,
+  decryptCredentialReport,
   maskCardNumber,
   validateFormatSupport,
 };

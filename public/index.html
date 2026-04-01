@@ -1732,6 +1732,8 @@ function showEventDetail(ev) {
       ${row('Event Code', fmtEventCode(ev.eventType))}
       ${ev.friendlyText ? row('Summary', ev.friendlyText) : ''}
       ${ev.presentedCardNumber ? row('Presented Card', ev.presentedCardNumber) : ''}
+      ${ev.decodedCredential?.facilityCode ? row('Facility Code', ev.decodedCredential.facilityCode) : ''}
+      ${ev.decodedCredential?.formatLabel ? row('Card Format', ev.decodedCredential.formatLabel) : ''}
       ${ev.reason ? row('Reason', ev.reason) : ''}
       ${fields.map(([k,v]) => row(k, v)).join('')}
     </div>

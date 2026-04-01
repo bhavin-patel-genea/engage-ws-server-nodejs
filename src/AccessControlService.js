@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const defaultCardFormats = require('./defaultCardFormats');
-const { generatePrimeCredential, maskCardNumber } = require('./PrimeCredential');
+const { generatePrimeCredential, decryptCredentialReport, maskCardNumber } = require('./PrimeCredential');
 const { DEFAULT_SCHEDULE_ID, DAY_ORDER } = require('./AccessStateStore');
 
 const DEFAULT_ACT_DT_TM = '20000101000000';
@@ -45,6 +45,7 @@ class AccessControlService {
   constructor(store, options = {}) {
     this.store = store;
     this.siteKeyFile = options.siteKeyFile || './config/sitekey';
+    this._cachedSiteKey = null;
   }
 
   getState(availableLocks = [], pushStatuses = {}) {
@@ -380,7 +381,35 @@ class AccessControlService {
       );
     }
 
-    const presentedCard = firstCardDisplayValue(cardCandidates);
+    let presentedCard = firstCardDisplayValue(cardCandidates);
+    let decodedCredential = null;
+
+    // If no card number found from standard fields, try decrypting credentialReport
+    if (!presentedCard && !matchedUser) {
+      const credReport = Array.isArray(parsedBody.credentialReport)
+        ? parsedBody.credentialReport
+        : [];
+      const credHex = credReport[0]?.cred;
+      if (credHex) {
+        try {
+          if (!this._cachedSiteKey) {
+            try { this._cachedSiteKey = fs.readFileSync(this.siteKeyFile, 'utf8').trim(); } catch { /* no site key */ }
+          }
+          if (this._cachedSiteKey) {
+            const siteKey = this._cachedSiteKey;
+            const allFormats = [...defaultCardFormats, ...(snapshot.customCardFormats || [])];
+            decodedCredential = decryptCredentialReport(credHex, siteKey, allFormats);
+            if (decodedCredential?.cardNumber) {
+              presentedCard = decodedCredential.cardNumber;
+              // Try to match decoded card number against configured users
+              matchedUser = candidates.find(user =>
+                String(user.cardNumber || '').trim() === presentedCard
+              );
+            }
+          }
+        } catch { /* decryption failed — continue without card number */ }
+      }
+    }
 
     const subject = matchedUser?.name
       ? matchedUser.name
@@ -401,6 +430,7 @@ class AccessControlService {
       } : null,
       subject,
       presentedCardNumber: presentedCard,
+      decodedCredential,
     };
   }
 

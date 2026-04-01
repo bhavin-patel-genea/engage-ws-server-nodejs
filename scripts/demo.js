@@ -418,6 +418,7 @@ server.on('engage:event', ({ sn, event }) => {
         entry.lockName = lockName;
         entry.friendlyText = friendlyText;
         entry.presentedCardNumber = accessLookup.presentedCardNumber || null;
+        entry.decodedCredential = accessLookup.decodedCredential || null;
 
         const accessEvent = {
           id: `${entry.timestamp}-${sn}-${linkId || 'gateway'}-${auditIndex}`,
@@ -429,6 +430,7 @@ server.on('engage:event', ({ sn, event }) => {
           friendlyText,
           subject: accessLookup.subject,
           presentedCardNumber: accessLookup.presentedCardNumber || null,
+          decodedCredential: accessLookup.decodedCredential || null,
           timestamp: entry.timestamp,
           user: accessLookup.user,
           reason: entry.reason,
@@ -507,6 +509,7 @@ server.on('engage:event', ({ sn, event }) => {
     entry.lockName = lockName;
     entry.friendlyText = friendlyText;
     entry.presentedCardNumber = accessLookup.presentedCardNumber || null;
+    entry.decodedCredential = accessLookup.decodedCredential || null;
 
     const accessEvent = {
       id: `${entry.timestamp}-${sn}-${linkId || 'gateway'}`,
@@ -518,6 +521,7 @@ server.on('engage:event', ({ sn, event }) => {
       friendlyText,
       subject: accessLookup.subject,
       presentedCardNumber: accessLookup.presentedCardNumber || null,
+      decodedCredential: accessLookup.decodedCredential || null,
       timestamp: entry.timestamp,
       user: accessLookup.user,
       reason: entry.reason,
