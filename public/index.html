@@ -436,6 +436,493 @@
     #toast.success { border-color: var(--green);  color: #4ade80; }
     #toast.error   { border-color: var(--red);    color: #f87171; }
     #toast.warn    { border-color: var(--yellow); color: #fbbf24; }
+
+    .mode-switch {
+      display: flex;
+      gap: 6px;
+      margin-left: 12px;
+    }
+    .mode-btn {
+      background: var(--surface2);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 5px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .mode-btn-active {
+      color: var(--text);
+      border-color: var(--accent);
+      background: var(--accent-dim);
+    }
+
+    .access-page {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 420px;
+      grid-template-rows: auto minmax(0, 1fr);
+      overflow: hidden;
+      background: linear-gradient(180deg, rgba(10, 14, 22, 0.98), rgba(13, 17, 23, 1));
+    }
+    .access-sidebar {
+      grid-column: 1 / -1;
+      background: linear-gradient(135deg, rgba(22, 27, 34, 0.98), rgba(20, 32, 54, 0.98));
+      border-bottom: 1px solid var(--border);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .access-main {
+      grid-column: 1;
+      min-width: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      background: linear-gradient(180deg, rgba(22, 27, 34, 0.92), rgba(13, 17, 23, 1));
+    }
+    .access-right {
+      grid-column: 2;
+      min-width: 0;
+      background: linear-gradient(180deg, rgba(22, 27, 34, 0.98), rgba(11, 18, 32, 1));
+      border-left: 1px solid var(--border);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .access-toolbar {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      background: rgba(28,34,48,.55);
+    }
+    .toolbar-spacer {
+      margin-left: auto;
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+    .toolbar-btn, .mini-btn {
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .toolbar-btn.primary {
+      border-color: var(--accent);
+      background: var(--accent-dim);
+      color: #c7d2fe;
+    }
+    .toolbar-btn.warn, .mini-btn.danger {
+      border-color: rgba(239,68,68,.35);
+      color: #fca5a5;
+    }
+    .access-panels {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+      grid-template-rows: minmax(280px, 1fr) minmax(190px, 0.72fr);
+      grid-template-areas:
+        "users schedules"
+        "formats formats";
+      gap: 10px;
+      padding: 10px;
+    }
+    .access-panel {
+      background: rgba(22,27,34,.92);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .access-panel-users { grid-area: users; }
+    .access-panel-schedules { grid-area: schedules; }
+    .access-panel-formats { grid-area: formats; }
+    .access-panel-body {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      padding: 12px;
+    }
+    .access-empty, .access-table-empty, .checkbox-empty {
+      color: var(--text-muted);
+      font-size: 12px;
+      padding: 12px;
+    }
+    .access-lock-list {
+      padding: 12px 16px 16px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      display: flex;
+      flex-direction: row;
+      gap: 10px;
+    }
+    .access-lock-item {
+      flex: 0 0 240px;
+      text-align: left;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      cursor: pointer;
+      color: var(--text);
+    }
+    .access-lock-item.selected {
+      border-color: var(--accent);
+      background: rgba(59,130,246,.12);
+    }
+    .access-lock-title {
+      font-weight: 700;
+      font-size: 12px;
+    }
+    .access-lock-meta, .access-lock-status {
+      color: var(--text-muted);
+      font-size: 10px;
+      margin-top: 2px;
+    }
+    .format-source-pill {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 10px;
+      font-weight: 700;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      background: rgba(148, 163, 184, 0.08);
+    }
+    .format-source-pill.custom {
+      color: #93c5fd;
+      border-color: rgba(59, 130, 246, 0.35);
+      background: rgba(59, 130, 246, 0.12);
+    }
+    .format-source-pill.builtin {
+      color: #cbd5e1;
+    }
+    .format-row-title {
+      font-weight: 700;
+      color: var(--text);
+    }
+    .format-row-meta {
+      margin-top: 3px;
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+    .format-compat {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+    .format-compat.warn {
+      color: #fca5a5;
+    }
+    .access-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+    .access-table th, .access-table td {
+      padding: 10px 8px;
+      border-bottom: 1px solid rgba(45,55,72,.55);
+      vertical-align: top;
+    }
+    .access-table th {
+      color: var(--text-muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      background: rgba(28,34,48,.55);
+      position: sticky;
+      top: 0;
+    }
+    .access-actions-cell {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .record-title {
+      font-weight: 700;
+      color: var(--text);
+    }
+    .record-meta {
+      margin-top: 3px;
+      font-size: 10px;
+      color: var(--text-muted);
+      line-height: 1.35;
+    }
+    .pill-default {
+      display: inline-block;
+      margin-left: 6px;
+      background: rgba(34,197,94,.15);
+      color: #4ade80;
+      border: 1px solid rgba(34,197,94,.25);
+      border-radius: 999px;
+      padding: 2px 7px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .access-preview-meta {
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+    .access-preview-title {
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .access-preview-summary {
+      color: var(--text-muted);
+    }
+    .access-preview-json {
+      flex: 1 1 auto;
+      min-height: 240px;
+      margin: 0;
+      padding: 12px;
+      overflow: auto;
+      font-size: 10px;
+      color: #cbd5e1;
+      background: #0b1220;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .status-box {
+      padding: 12px;
+    }
+    .status-line {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(45,55,72,.45);
+      font-size: 11px;
+    }
+    .status-line span {
+      color: var(--text-muted);
+    }
+    .swipe-feed {
+      padding: 12px;
+      overflow: auto;
+      min-height: 160px;
+      max-height: 240px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .swipe-item {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      background: var(--surface2);
+    }
+    .swipe-item.granted {
+      border-color: rgba(34,197,94,.35);
+      background: rgba(34,197,94,.08);
+    }
+    .swipe-item.denied {
+      border-color: rgba(239,68,68,.35);
+      background: rgba(239,68,68,.08);
+    }
+    .swipe-result {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+    .swipe-text {
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .swipe-time {
+      margin-top: 6px;
+      color: var(--text-muted);
+      font-size: 10px;
+    }
+    .access-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(2,6,23,.72);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1100;
+      padding: 24px;
+    }
+    .access-modal.show {
+      display: flex;
+    }
+    .access-modal-card {
+      width: min(980px, 100%);
+      max-height: 88vh;
+      overflow: auto;
+      background: #f7f8fb;
+      color: #0f172a;
+      border-radius: 14px;
+      box-shadow: 0 30px 80px rgba(0,0,0,.45);
+    }
+    .access-modal-card.small {
+      width: min(720px, 100%);
+    }
+    .access-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 22px;
+      border-bottom: 1px solid #d4d8e2;
+      font-weight: 700;
+    }
+    .access-modal-body {
+      padding: 18px 22px 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .form-grid, .format-grid {
+      display: grid;
+      gap: 14px;
+    }
+    .form-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .format-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    .form-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .form-field label {
+      font-size: 12px;
+      color: #334155;
+      font-weight: 600;
+    }
+    .form-field input, .form-field select, .form-field textarea {
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font: inherit;
+      background: white;
+      color: #0f172a;
+    }
+    .form-field textarea {
+      min-height: 84px;
+      resize: vertical;
+    }
+    .form-helper {
+      font-size: 11px;
+      color: #64748b;
+      line-height: 1.5;
+    }
+    .form-helper.success {
+      color: #15803d;
+    }
+    .form-helper.warn {
+      color: #b45309;
+    }
+    .form-error {
+      border: 1px solid rgba(220, 38, 38, 0.25);
+      background: rgba(254, 226, 226, 0.85);
+      color: #991b1b;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .check-list {
+      display: grid;
+      gap: 8px;
+      border: 1px solid #d5dbe7;
+      border-radius: 10px;
+      background: #fff;
+      padding: 10px 12px;
+      max-height: 180px;
+      overflow: auto;
+    }
+    .check-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      font-size: 12px;
+      color: #334155;
+    }
+    .check-row small {
+      color: #64748b;
+    }
+    .day-grid {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .access-modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      padding-top: 8px;
+    }
+    .light-btn {
+      border: 1px solid #cbd5e1;
+      background: white;
+      color: #334155;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .primary-btn {
+      border: 1px solid #2563eb;
+      background: #2563eb;
+      color: white;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    @media (max-width: 1280px) {
+      .access-page {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
+      }
+      .access-main {
+        grid-column: 1;
+        grid-row: 2;
+      }
+      .access-right {
+        grid-column: 1;
+        grid-row: 3;
+        border-left: none;
+        border-top: 1px solid var(--border);
+      }
+      .access-panels {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(250px, auto) minmax(250px, auto) minmax(180px, auto);
+        grid-template-areas:
+          "users"
+          "schedules"
+          "formats";
+        overflow-y: auto;
+      }
+    }
+    @media (max-width: 1100px) {
+      .access-lock-item {
+        flex-basis: 210px;
+      }
+      .form-grid, .format-grid {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
@@ -443,6 +930,10 @@
 <!-- ── Header ──────────────────────────────────────────────────────────────── -->
 <header>
   <div class="logo">ENGAGE <span>Gateway Dashboard</span></div>
+  <div class="mode-switch">
+    <button class="mode-btn mode-btn-active" id="mode-live" type="button">Live Control</button>
+    <button class="mode-btn" id="mode-access" type="button">Access Database</button>
+  </div>
   <div class="header-meta">
     <div class="server-badge">
       <div class="pulse"></div>
@@ -453,7 +944,7 @@
 </header>
 
 <!-- ── Main layout ───────────────────────────────────────────────────────────── -->
-<div class="layout">
+<div class="layout" id="live-view">
 
   <!-- ── Sidebar: gateways ─────────────────────────────────────────────────── -->
   <div class="sidebar">
@@ -552,6 +1043,332 @@
 </div>
 
 <!-- ── Toast ──────────────────────────────────────────────────────────────────── -->
+<div class="access-page" id="access-view" hidden>
+  <aside class="access-sidebar">
+    <div class="section-header">
+      Target Locks
+      <span class="badge-count" id="access-lock-count">0</span>
+    </div>
+    <div class="access-lock-list" id="access-lock-list">
+      <div class="access-empty">No connected locks. Connect a gateway to manage access databases.</div>
+    </div>
+  </aside>
+
+  <main class="access-main">
+    <div class="access-toolbar">
+      <button class="toolbar-btn primary" type="button" onclick="window.accessUI.openUserModal()">Add Credential</button>
+      <button class="toolbar-btn" type="button" onclick="window.accessUI.openScheduleModal()">Add Schedule</button>
+      <button class="toolbar-btn" type="button" onclick="window.accessUI.openFormatModal()">Custom Card Format</button>
+      <div class="toolbar-spacer">Select a lock to preview the exact ENGAGE database payload before pushing.</div>
+    </div>
+
+    <div class="access-panels">
+      <section class="access-panel access-panel-users">
+        <div class="section-header">
+          Credentials
+          <span class="badge-count" id="access-user-count">0 credentials</span>
+        </div>
+        <div class="access-panel-body">
+          <table class="access-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>User ID</th>
+                <th>Card</th>
+                <th>Format</th>
+                <th>Schedules</th>
+                <th>Locks</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="access-users-body">
+              <tr><td colspan="7" class="access-table-empty">No credentials added yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="access-panel access-panel-schedules">
+        <div class="section-header">
+          Stored Schedules
+          <span class="badge-count" id="access-schedule-count">0 schedules</span>
+        </div>
+        <div class="access-panel-body">
+          <table class="access-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Days</th>
+                <th>Start</th>
+                <th>Length</th>
+                <th>Locks</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="access-schedules-body">
+              <tr><td colspan="6" class="access-table-empty">No schedules defined.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="access-panel access-panel-formats">
+        <div class="section-header">
+          Card Formats
+          <span class="badge-count" id="access-format-count">0 custom</span>
+        </div>
+        <div class="access-panel-body">
+          <table class="access-table">
+            <thead>
+              <tr>
+                <th>Source</th>
+                <th>Format</th>
+                <th>Total Bits</th>
+                <th>Facility</th>
+                <th>Notes</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="access-formats-body">
+              <tr><td colspan="6" class="access-table-empty">Built-in and custom formats will appear here.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <aside class="access-right">
+    <div class="section-header">Payload Preview</div>
+    <div class="access-preview-meta">
+      <div class="access-preview-title" id="access-preview-title">No lock selected</div>
+      <div class="access-preview-summary" id="access-preview-summary">Select a lock to build a payload preview.</div>
+    </div>
+    <pre class="access-preview-json" id="access-preview-json"></pre>
+
+    <div class="section-header" style="border-top:1px solid var(--border)">Transfer Status</div>
+    <div class="status-box" id="access-transfer-status">
+      <div class="access-empty">Changes sync to the selected lock automatically after save.</div>
+    </div>
+
+    <div class="section-header" style="border-top:1px solid var(--border)">Recent Swipes</div>
+    <div class="swipe-feed" id="access-swipe-feed">
+      <div class="access-empty">No swipe activity yet.</div>
+    </div>
+  </aside>
+</div>
+
+<div class="access-modal" id="access-user-modal">
+  <div class="access-modal-card small">
+    <div class="access-modal-header">
+      <span>Credential Details</span>
+      <button class="light-btn" type="button" onclick="window.accessUI.closeModal('access-user-modal')">Close</button>
+    </div>
+    <form class="access-modal-body" id="access-user-form">
+      <input id="access-user-id" type="hidden" />
+      <div class="form-error" id="access-user-error" hidden></div>
+      <div class="form-grid">
+        <div class="form-field">
+          <label for="access-user-name">User Name</label>
+          <input id="access-user-name" type="text" placeholder="Alice Smith" />
+        </div>
+        <div class="form-field">
+          <label for="access-user-usrid">User ID</label>
+          <input id="access-user-usrid" type="number" min="1" required />
+        </div>
+        <div class="form-field">
+          <label for="access-user-card">Card Number</label>
+          <input id="access-user-card" type="text" inputmode="numeric" required />
+        </div>
+        <div class="form-field">
+          <label for="access-user-format">Card Format</label>
+          <select id="access-user-format" required></select>
+          <div class="access-actions-cell">
+            <button class="mini-btn" type="button" onclick="window.accessUI.openFormatModal()">New Custom Format</button>
+          </div>
+          <div class="form-helper" id="access-user-format-hint">Select a format to validate the card number.</div>
+        </div>
+        <div class="form-field" id="access-user-fc-wrap" hidden>
+          <label for="access-user-facility">Facility Code</label>
+          <input id="access-user-facility" type="number" min="0" />
+        </div>
+        <div class="form-field">
+          <label for="access-user-issue">Issue Code</label>
+          <input id="access-user-issue" type="number" min="0" value="0" />
+        </div>
+      </div>
+
+      <div class="form-grid">
+        <div class="form-field">
+          <label>Schedules</label>
+          <div class="check-list" id="access-user-schedules"></div>
+        </div>
+        <div class="form-field">
+          <label>Assign To Locks</label>
+          <div class="check-list" id="access-user-locks"></div>
+        </div>
+      </div>
+
+      <div class="access-modal-actions">
+        <button class="light-btn" type="button" onclick="window.accessUI.closeModal('access-user-modal')">Cancel</button>
+        <button class="primary-btn" type="submit">Save Credential</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="access-modal" id="access-schedule-modal">
+  <div class="access-modal-card small">
+    <div class="access-modal-header">
+      <span>Schedule Details</span>
+      <button class="light-btn" type="button" onclick="window.accessUI.closeModal('access-schedule-modal')">Close</button>
+    </div>
+    <form class="access-modal-body" id="access-schedule-form">
+      <input id="access-schedule-id" type="hidden" />
+      <div class="form-error" id="access-schedule-error" hidden></div>
+      <div class="form-grid">
+        <div class="form-field">
+          <label for="access-schedule-name">Name</label>
+          <input id="access-schedule-name" type="text" placeholder="Weekday 9-5" required />
+        </div>
+        <div class="form-field">
+          <label for="access-schedule-description">Description</label>
+          <input id="access-schedule-description" type="text" placeholder="Optional note" />
+        </div>
+        <div class="form-field">
+          <label for="access-schedule-hour">Start Hour</label>
+          <input id="access-schedule-hour" type="number" min="0" max="23" required />
+        </div>
+        <div class="form-field">
+          <label for="access-schedule-minute">Start Minute</label>
+          <input id="access-schedule-minute" type="number" min="0" max="59" required />
+        </div>
+        <div class="form-field">
+          <label for="access-schedule-length">Length (minutes)</label>
+          <input id="access-schedule-length" type="number" min="1" max="1439" required />
+        </div>
+      </div>
+
+      <div class="form-field">
+        <label>Days</label>
+        <div class="day-grid">
+          <label class="check-row"><input type="checkbox" name="access-schedule-day" value="Su" /> <span>Su</span></label>
+          <label class="check-row"><input type="checkbox" name="access-schedule-day" value="Mo" /> <span>Mo</span></label>
+          <label class="check-row"><input type="checkbox" name="access-schedule-day" value="Tu" /> <span>Tu</span></label>
+          <label class="check-row"><input type="checkbox" name="access-schedule-day" value="We" /> <span>We</span></label>
+          <label class="check-row"><input type="checkbox" name="access-schedule-day" value="Th" /> <span>Th</span></label>
+          <label class="check-row"><input type="checkbox" name="access-schedule-day" value="Fr" /> <span>Fr</span></label>
+          <label class="check-row"><input type="checkbox" name="access-schedule-day" value="Sa" /> <span>Sa</span></label>
+        </div>
+      </div>
+
+      <div class="form-field">
+        <label>Include In Lock Payloads</label>
+        <div class="check-list" id="access-schedule-locks"></div>
+      </div>
+
+      <div class="access-modal-actions">
+        <button class="light-btn" type="button" onclick="window.accessUI.closeModal('access-schedule-modal')">Cancel</button>
+        <button class="primary-btn" type="submit">Save Schedule</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="access-modal" id="access-format-modal">
+  <div class="access-modal-card">
+    <div class="access-modal-header">
+      <span>Custom Card Format</span>
+      <button class="light-btn" type="button" onclick="window.accessUI.closeModal('access-format-modal')">Close</button>
+    </div>
+    <form class="access-modal-body" id="access-format-form">
+      <input id="access-format-id" type="hidden" />
+      <div class="form-error" id="access-format-error" hidden></div>
+      <div class="form-helper">This POC supports generic Wiegand custom formats, including reverse-card and reverse-byte handling.</div>
+      <div class="form-grid">
+        <div class="form-field">
+          <label for="access-format-name">Name</label>
+          <input id="access-format-name" type="text" placeholder="32 Bit Custom | Employee" required />
+        </div>
+        <div class="form-field">
+          <label for="access-format-description">Description</label>
+          <input id="access-format-description" type="text" placeholder="Optional description" />
+        </div>
+      </div>
+
+      <div class="format-grid">
+        <div class="form-field">
+          <label for="access-format-total-bits">Total Number Of Bits</label>
+          <input id="access-format-total-bits" type="number" min="1" required />
+        </div>
+        <div class="form-field">
+          <label for="access-format-offset">Offset</label>
+          <input id="access-format-offset" type="number" min="0" required />
+        </div>
+        <div class="form-field">
+          <label for="access-format-fc-min">Facility Code Min</label>
+          <input id="access-format-fc-min" type="number" min="0" />
+        </div>
+        <div class="form-field">
+          <label for="access-format-fc-max">Facility Code Max</label>
+          <input id="access-format-fc-max" type="number" min="0" />
+        </div>
+        <div class="form-field">
+          <label for="access-format-fc-bits">Total Facility Code Bits</label>
+          <input id="access-format-fc-bits" type="number" min="0" required />
+        </div>
+        <div class="form-field">
+          <label for="access-format-fc-start">Facility Code Starts At</label>
+          <input id="access-format-fc-start" type="number" min="0" required />
+        </div>
+        <div class="form-field">
+          <label for="access-format-issue-bits">Total Issue Code Bits</label>
+          <input id="access-format-issue-bits" type="number" min="0" required />
+        </div>
+        <div class="form-field">
+          <label for="access-format-issue-start">Issue Code Starts At</label>
+          <input id="access-format-issue-start" type="number" min="0" required />
+        </div>
+        <div class="form-field">
+          <label for="access-format-card-bits">Total Card Number Bits</label>
+          <input id="access-format-card-bits" type="number" min="1" required />
+        </div>
+        <div class="form-field">
+          <label for="access-format-card-start">Card Number Bits Starts At</label>
+          <input id="access-format-card-start" type="number" min="0" required />
+        </div>
+        <div class="form-field">
+          <label for="access-format-odd-bits">Odd Parity Bits</label>
+          <input id="access-format-odd-bits" type="number" min="0" required />
+        </div>
+        <div class="form-field">
+          <label for="access-format-odd-start">Odd Parity Bits Starts At</label>
+          <input id="access-format-odd-start" type="number" min="0" required />
+        </div>
+        <div class="form-field">
+          <label for="access-format-even-bits">Even Parity Bits</label>
+          <input id="access-format-even-bits" type="number" min="0" required />
+        </div>
+        <div class="form-field">
+          <label for="access-format-even-start">Even Parity Bits Starts At</label>
+          <input id="access-format-even-start" type="number" min="0" required />
+        </div>
+      </div>
+
+      <div class="day-grid">
+        <label class="check-row"><input id="access-format-suppress-fc" type="checkbox" /> <span>Suppress facility check</span></label>
+        <label class="check-row"><input id="access-format-reverse-card" type="checkbox" /> <span>Reverse card format</span></label>
+        <label class="check-row"><input id="access-format-reverse-bytes" type="checkbox" /> <span>Reversal of bytes</span></label>
+      </div>
+
+      <div class="access-modal-actions">
+        <button class="light-btn" type="button" onclick="window.accessUI.closeModal('access-format-modal')">Cancel</button>
+        <button class="primary-btn" type="submit">Save Format</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <!-- ── App script ─────────────────────────────────────────────────────────────── -->
@@ -566,7 +1383,15 @@ const state = {
   filter:   'all',
   connectionStats: null,
   reconnectionHistory: [],
+  recentAccessEvents: [],
+  databasePushStates: {},
 };
+
+function syncAccessUi() {
+  if (window.accessUI && typeof window.accessUI.renderAll === 'function') {
+    window.accessUI.renderAll();
+  }
+}
 
 // ── SSE connection ────────────────────────────────────────────────────────────
 const sse = new EventSource('/api/stream');
@@ -578,6 +1403,8 @@ sse.addEventListener('init', e => {
   state.events   = data.events   || [];
   state.connectionStats = data.connectionStats || null;
   state.reconnectionHistory = data.reconnectionHistory || [];
+  state.recentAccessEvents = data.recentAccessEvents || [];
+  state.databasePushStates = data.databasePushStates || {};
 
   document.getElementById('server-label').textContent =
     `ws://localhost — port ${data.port || ''}`;
@@ -597,6 +1424,7 @@ sse.addEventListener('gateway:connected', e => {
     : '';
   addEvent({ eventType: null, category: 'Gateway', title: 'Gateway Connected', result: 'info', reason, source: 'server', deviceId: '', body: '', timestamp: connectedAt, sn });
   renderGateways();
+  syncAccessUi();
 });
 
 sse.addEventListener('reconnection:gap', e => {
@@ -620,6 +1448,7 @@ sse.addEventListener('device:list', e => {
   state.devices[sn] = devices;
   renderDevices();
   updateDeviceCount();
+  syncAccessUi();
 });
 
 sse.addEventListener('engage:event', e => {
@@ -634,7 +1463,21 @@ sse.addEventListener('lock:result', e => {
       if (link_id === 'all' || d.linkId === link_id) d.lockState = action;
     });
     renderDevices();
+    syncAccessUi();
   }
+});
+
+sse.addEventListener('access:event', e => {
+  const data = JSON.parse(e.data);
+  state.recentAccessEvents.unshift(data);
+  if (state.recentAccessEvents.length > 25) state.recentAccessEvents.pop();
+  syncAccessUi();
+});
+
+sse.addEventListener('database:status', e => {
+  const data = JSON.parse(e.data);
+  state.databasePushStates[data.linkId] = data;
+  syncAccessUi();
 });
 
 // Server emits this when a lock command found no connected gateway and is now
@@ -662,6 +1505,7 @@ function renderAll() {
   renderGateways();
   renderDevices();
   renderEvents();
+  syncAccessUi();
 }
 
 function renderGateways() {
@@ -750,7 +1594,7 @@ function renderEvents() {
 
   tbody.innerHTML = filtered.slice(0, 100).map((ev, i) => {
     const result  = ev.result   || 'info';
-    const title   = ev.title    || String(ev.eventType || '');
+    const title   = ev.friendlyText || ev.title || String(ev.eventType || '');
     const cat     = ev.category || '';
     const reason  = ev.reason   || '';
     const device  = ev.deviceId || '';
@@ -874,7 +1718,7 @@ function showEventDetail(ev) {
     <div class="detail-item" style="border-color:${resultColor(result)}">
       <div class="detail-item-header">
         <span class="result-pill ${result}" style="font-size:12px;padding:4px 10px">
-          ${resultIcon(result)} ${ev.title || resultLabel(result)}
+          ${resultIcon(result)} ${ev.friendlyText || ev.title || resultLabel(result)}
         </span>
         <span class="detail-item-time">${fmtTimestamp(ev.timestamp)}</span>
       </div>
@@ -886,6 +1730,8 @@ function showEventDetail(ev) {
       ${row('Device',   ev.deviceId)}
       ${row('Category', ev.category)}
       ${row('Event Code', fmtEventCode(ev.eventType))}
+      ${ev.friendlyText ? row('Summary', ev.friendlyText) : ''}
+      ${ev.presentedCardNumber ? row('Presented Card', ev.presentedCardNumber) : ''}
       ${ev.reason ? row('Reason', ev.reason) : ''}
       ${fields.map(([k,v]) => row(k, v)).join('')}
     </div>
@@ -997,6 +1843,7 @@ function showToast(msg, type = '', durationMs = 3000) {
   toastTimer = setTimeout(() => { el.className = ''; }, durationMs);
 }
 </script>
+<script src="/access-ui.js"></script>
 
 </body>
 </html>

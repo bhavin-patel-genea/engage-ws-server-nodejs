@@ -53,6 +53,9 @@ const DEVICES = [
 // Mutable state map — updated when the server sends lock commands
 const deviceState = {};
 DEVICES.forEach(d => { deviceState[d.linkId] = 'locked'; });
+const databaseTransferState = {};
+const activeDoorfiles = {};
+let activeWs = null;
 
 // ── AES-256-CBC Credential Challenge ─────────────────────────────────────────
 // Mirrors exactly what a real gateway firmware does.
@@ -107,7 +110,7 @@ function postNewCredentials(siteKey, sn) {
 
 // ── Request Router ────────────────────────────────────────────────────────────
 // Receives a parsed ENGAGE request from the server and returns a response JSON.
-function routeRequest(requestId, method, reqPath, messageBody) {
+function routeRequest(requestId, method, reqPath, messageBody, ws) {
   const parts = reqPath.replace(/^\//, '').split('/'); // ['edgeDevices','dev00001','lockControl']
 
   // ── GET /gateway/scanList
@@ -161,6 +164,21 @@ function routeRequest(requestId, method, reqPath, messageBody) {
   // ── PUT /edgeDevices/:linkId/lockControl  (single device)
   if ((method === 'PUT' || method === 'POST') && parts.length === 3 && parts[0] === 'edgeDevices' && parts[2] === 'lockControl') {
     return applyLockControl(requestId, parts[1], messageBody, /*broadcast=*/false);
+  }
+
+  // ── PUT /edgeDevices/:linkId/database
+  if (method === 'PUT' && parts.length === 3 && parts[0] === 'edgeDevices' && parts[2] === 'database') {
+    return applyDatabaseUpdate(requestId, parts[1], messageBody, ws);
+  }
+
+  // ── DELETE /edgeDevices/:linkId/database
+  if (method === 'DELETE' && parts.length === 3 && parts[0] === 'edgeDevices' && parts[2] === 'database') {
+    return cancelDatabaseUpdate(requestId, parts[1]);
+  }
+
+  // ── GET /edgeDevices/:linkId/dbDownloadStatus
+  if (method === 'GET' && parts.length === 3 && parts[0] === 'edgeDevices' && parts[2] === 'dbDownloadStatus') {
+    return getDatabaseDownloadStatus(requestId, parts[1]);
   }
 
   // ── Unknown
@@ -218,6 +236,114 @@ function printDeviceTable() {
   console.log('    └─────────┴────────────────┴─────────────────┘');
 }
 
+function applyDatabaseUpdate(requestId, linkId, messageBody, ws) {
+  if (!(linkId in deviceState)) return err(requestId, '404', `linkId '${linkId}' not found`);
+
+  let parsed;
+  try {
+    parsed = JSON.parse(messageBody);
+  } catch (e) {
+    return err(requestId, '400', `invalid database payload: ${e.message}`);
+  }
+
+  const userCount = parsed?.db?.usrRcrd?.add?.length || 0;
+  const scheduleCount = parsed?.db?.schedules?.length || 0;
+  activeDoorfiles[linkId] = parsed;
+  databaseTransferState[linkId] = {
+    state: 'inProgress',
+    progress: 0,
+    startedAt: new Date().toISOString(),
+    userCount,
+    scheduleCount,
+    lastPayloadVersion: parsed?.nxtDbVerTS || null,
+  };
+
+  console.log(`    ✔  Database accepted for ${linkId} (${userCount} users, ${scheduleCount} schedules)`);
+
+  setTimeout(() => {
+    if (!databaseTransferState[linkId] || databaseTransferState[linkId].state === 'cancelled') return;
+    databaseTransferState[linkId].state = 'inProgress';
+    databaseTransferState[linkId].progress = 50;
+    databaseTransferState[linkId].updatedAt = new Date().toISOString();
+  }, 800);
+
+  setTimeout(() => {
+    if (!databaseTransferState[linkId] || databaseTransferState[linkId].state === 'cancelled') return;
+    databaseTransferState[linkId].state = 'completed';
+    databaseTransferState[linkId].progress = 100;
+    databaseTransferState[linkId].updatedAt = new Date().toISOString();
+    sendAuditEvent(ws, linkId, '06000000', {
+      edgeDevice: {
+        linkId,
+        audits: [
+          { event: '06000000' },
+        ],
+      },
+    });
+  }, 1800);
+
+  return ok(requestId, {
+    result: 'accepted',
+    linkId,
+    progress: 0,
+    status: 'inProgress',
+  });
+}
+
+function cancelDatabaseUpdate(requestId, linkId) {
+  if (!(linkId in deviceState)) return err(requestId, '404', `linkId '${linkId}' not found`);
+
+  databaseTransferState[linkId] = {
+    ...(databaseTransferState[linkId] || {}),
+    state: 'cancelled',
+    progress: null,
+    updatedAt: new Date().toISOString(),
+  };
+
+  return ok(requestId, {
+    result: 'cancelled',
+    linkId,
+  });
+}
+
+function getDatabaseDownloadStatus(requestId, linkId) {
+  if (!(linkId in deviceState)) return err(requestId, '404', `linkId '${linkId}' not found`);
+
+  const status = databaseTransferState[linkId] || {
+    state: 'idle',
+    progress: null,
+    updatedAt: null,
+    userCount: activeDoorfiles[linkId]?.db?.usrRcrd?.add?.length || 0,
+    scheduleCount: activeDoorfiles[linkId]?.db?.schedules?.length || 0,
+  };
+
+  return ok(requestId, {
+    dbDownloadStatus: {
+      state: status.state,
+      progress: status.progress,
+      updatedAt: status.updatedAt || null,
+      userCount: status.userCount || 0,
+      scheduleCount: status.scheduleCount || 0,
+      lastPayloadVersion: status.lastPayloadVersion || null,
+    },
+  });
+}
+
+function sendAuditEvent(ws, linkId, eventType, body) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  const payload = {
+    eventId: Date.now(),
+    event: {
+      eventType,
+      source: 'edgeDevice',
+      deviceId: linkId,
+      eventBody: JSON.stringify(body),
+    },
+  };
+  ws.send(JSON.stringify(payload));
+  console.log(`    ↳ audit event ${eventType} emitted for ${linkId}`);
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
   console.log('═'.repeat(60));
@@ -262,6 +388,7 @@ async function main() {
   );
 
   ws.on('open', () => {
+    activeWs = ws;
     console.log('[3/3] ✔  Connected — waiting for commands\n');
     console.log('  Simulated devices:');
     printDeviceTable();
@@ -296,7 +423,7 @@ async function main() {
         }
       }
 
-      const response = routeRequest(requestId, method, reqPath, messageBody);
+      const response = routeRequest(requestId, method, reqPath, messageBody, ws);
       ws.send(JSON.stringify(response));
 
       try {
@@ -315,6 +442,7 @@ async function main() {
   ws.on('ping', () => process.stdout.write('·'));
 
   ws.on('close', (code, reason) => {
+    activeWs = null;
     console.log(`\n[DISCONNECTED] code=${code}  reason=${reason.toString() || '(none)'}`);
     process.exit(0);
   });

@@ -55,6 +55,8 @@ const { EngageRequest } = require('../src/EngageWsProtocol');
 const { lookupEvent, buildReason } = require('../src/eventCodes');
 const AuditStore = require('../src/AuditStore');
 const ConnectionTracker = require('../src/ConnectionTracker');
+const { AccessStateStore } = require('../src/AccessStateStore');
+const AccessControlService = require('../src/AccessControlService');
 const log = require('../src/logger');
 
 // ── State ──────────────────────────────────────────────────────────────────────
@@ -63,7 +65,12 @@ const gateways = new Map(); // sn → { sn, connectedAt }
 const devices = new Map(); // sn → [{ linkId, deviceName, modelType, lockState }]
 const auditStore = new AuditStore('./data/audits.json', 48);     // 48-hour retention
 const connectionTracker = new ConnectionTracker('./data/connections.json');
+const accessStateStore = new AccessStateStore('./data/access-state.json');
+const accessService = new AccessControlService(accessStateStore, { siteKeyFile: './config/sitekey' });
 const sseClients = new Set(); // active SSE response objects
+const recentAccessEvents = [];
+const databasePushStates = new Map(); // linkId → status object
+const databasePollers = new Map(); // linkId → interval handle
 
 // ── SSE broadcast ──────────────────────────────────────────────────────────────
 
@@ -72,6 +79,144 @@ function broadcast(eventName, data) {
   for (const res of sseClients) {
     res.write(payload);
   }
+}
+
+function listAvailableLocks() {
+  return Array.from(devices.entries()).flatMap(([sn, list]) =>
+    list.map(device => ({
+      sn,
+      linkId: device.linkId,
+      deviceName: device.deviceName,
+      modelType: device.modelType,
+      lockState: device.lockState,
+    }))
+  );
+}
+
+function findLock(linkId, gatewaySn = null) {
+  for (const [sn, list] of devices.entries()) {
+    if (gatewaySn && sn !== gatewaySn) continue;
+    const device = list.find(item => item.linkId === linkId);
+    if (device) return { sn, ...device };
+  }
+  return null;
+}
+
+function snapshotPushStates() {
+  return Object.fromEntries(Array.from(databasePushStates.entries()));
+}
+
+function updateDatabasePushState(linkId, patch) {
+  const next = {
+    linkId,
+    updatedAt: new Date().toISOString(),
+    ...(databasePushStates.get(linkId) || {}),
+    ...patch,
+  };
+  databasePushStates.set(linkId, next);
+  broadcast('database:status', next);
+  return next;
+}
+
+function parseJsonSafe(raw) {
+  if (raw === null || raw === undefined || raw === '') return null;
+  if (typeof raw === 'object') return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeDbDownloadStatus(responseStatus, responseBody) {
+  const parsed = parseJsonSafe(responseBody);
+  const source = parsed?.dbDownloadStatus || parsed?.downloadStatus || parsed?.status || parsed;
+
+  let state = 'unknown';
+  if (String(responseStatus) !== '200') state = 'failed';
+
+  const normalizedText = String(
+    source?.state ??
+    source?.status ??
+    source?.result ??
+    source?.downloadState ??
+    ''
+  ).toLowerCase();
+
+  if (normalizedText.includes('cancel')) state = 'cancelled';
+  else if (normalizedText.includes('fail') || normalizedText.includes('error')) state = 'failed';
+  else if (normalizedText.includes('complete') || normalizedText.includes('success') || normalizedText.includes('done')) state = 'completed';
+  else if (normalizedText.includes('progress') || normalizedText.includes('queue') || normalizedText.includes('pending') || normalizedText.includes('process')) state = 'in-progress';
+
+  if (source?.completed === true || source?.done === true) state = 'completed';
+  if (source?.failed === true) state = 'failed';
+
+  const progress = Number(
+    source?.progress ??
+    source?.percentComplete ??
+    source?.percentage ??
+    source?.pct ??
+    source?.downloadPct ??
+    NaN
+  );
+
+  return {
+    state,
+    progress: Number.isFinite(progress) ? progress : null,
+    raw: parsed ?? responseBody,
+  };
+}
+
+async function fetchDbDownloadStatus(sn, linkId) {
+  const response = await request(sn, 'GET', `/edgeDevices/${linkId}/dbDownloadStatus`, '', 15);
+  if (!response) {
+    return {
+      state: 'offline',
+      progress: null,
+      raw: null,
+      responseStatus: null,
+    };
+  }
+
+  const normalized = normalizeDbDownloadStatus(response.responseStatus, response.responseMessageBody);
+  return {
+    ...normalized,
+    responseStatus: response.responseStatus,
+  };
+}
+
+function startDbStatusPolling(sn, linkId, timeoutMs = 45_000) {
+  if (databasePollers.has(linkId)) return;
+
+  const startedAt = Date.now();
+  const timer = setInterval(async () => {
+    try {
+      const status = await fetchDbDownloadStatus(sn, linkId);
+      updateDatabasePushState(linkId, {
+        sn,
+        status: status.state,
+        progress: status.progress,
+        rawStatus: status.raw,
+        responseStatus: status.responseStatus,
+      });
+
+      const finished = ['completed', 'failed', 'cancelled'].includes(status.state);
+      if (finished || (Date.now() - startedAt) > timeoutMs) {
+        clearInterval(timer);
+        databasePollers.delete(linkId);
+      }
+    } catch (err) {
+      updateDatabasePushState(linkId, {
+        sn,
+        status: 'failed',
+        error: err.message,
+      });
+      clearInterval(timer);
+      databasePollers.delete(linkId);
+    }
+  }, 2_000);
+
+  databasePollers.set(linkId, timer);
 }
 
 // ── Gateway lifecycle ──────────────────────────────────────────────────────────
@@ -213,6 +358,7 @@ server.on('engage:event', ({ sn, event }) => {
 
   const container = body.edgeDevice || body.gateway || {};
   const audits = Array.isArray(container.audits) ? container.audits : [];
+  const firstAudit = audits[0] || {};
 
   // Real audit event code lives in audits[0].event (e.g. "0f010000")
   // Fall back to the outer eventType only if audits array is empty
@@ -233,6 +379,55 @@ server.on('engage:event', ({ sn, event }) => {
     body: event.eventBody,
     timestamp: new Date().toISOString(),
   };
+
+  const mergedAccessBody = {
+    ...body,
+    ...container,
+    ...firstAudit,
+  };
+
+  const lockInfo = linkId ? findLock(linkId, sn) : null;
+  if (lookup.category === 'Access') {
+    const accessLookup = accessService.resolveAccessEvent(linkId, mergedAccessBody);
+    const lockName = lockInfo?.deviceName || linkId || 'Unknown Lock';
+    const detail = entry.title
+      ? entry.title.replace(/^Access Granted(?: \(Pass-Through\)| \(One-Time Use\))?$/i, '').replace(/^Denied\s+[—-]\s*/i, '').trim()
+      : '';
+    const prefix = lookup.result === 'granted'
+      ? 'Access granted'
+      : lookup.result === 'denied'
+        ? 'Access denied'
+        : (entry.title || 'Access event');
+
+    let friendlyText = `${prefix} for ${accessLookup.subject} at ${lockName}`;
+    if (lookup.result === 'denied') {
+      const denialDetail = detail || entry.reason || '';
+      if (denialDetail) friendlyText += ` — ${denialDetail}`;
+    }
+
+    entry.displaySubject = accessLookup.subject;
+    entry.lockName = lockName;
+    entry.friendlyText = friendlyText;
+    entry.presentedCardNumber = accessLookup.presentedCardNumber || null;
+
+    const accessEvent = {
+      id: `${entry.timestamp}-${sn}-${linkId || 'gateway'}`,
+      sn,
+      linkId,
+      lockName,
+      result: lookup.result,
+      title: entry.title,
+      friendlyText,
+      subject: accessLookup.subject,
+      presentedCardNumber: accessLookup.presentedCardNumber || null,
+      timestamp: entry.timestamp,
+      user: accessLookup.user,
+      reason: entry.reason,
+    };
+    recentAccessEvents.unshift(accessEvent);
+    if (recentAccessEvents.length > 25) recentAccessEvents.pop();
+    broadcast('access:event', accessEvent);
+  }
 
   // Keep local lock state cache in sync when gateway reports a state change
   const LOCK_STATE_MAP = {
@@ -276,8 +471,10 @@ app.get('/api/stream', (req, res) => {
     gateways: Array.from(gateways.values()),
     devices: Object.fromEntries(devices),
     events: auditStore.getAll(50),
+    recentAccessEvents,
     connectionStats: connectionTracker.getStats(),
     reconnectionHistory: connectionTracker.getReconnectionHistory(null, 10),
+    databasePushStates: snapshotPushStates(),
   };
   res.write(`event: init\ndata: ${JSON.stringify(initPayload)}\n\n`);
 
@@ -376,6 +573,227 @@ app.get('/api/connections', (req, res) => {
     events: connectionTracker.getEvents(sn || null, 50),
     stats: connectionTracker.getStats(),
   });
+});
+
+// GET /api/access/state — Access Database UI state
+app.get('/api/access/state', (req, res) => {
+  res.json(accessService.getState(listAvailableLocks(), snapshotPushStates()));
+});
+
+// POST /api/access/formats — Create/update a custom card format
+app.post('/api/access/formats', parseJsonBody, (req, res) => {
+  try {
+    const state = accessService.upsertCustomCardFormat(req.body || {});
+    res.json({
+      ok: true,
+      customCardFormats: state.customCardFormats,
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// DELETE /api/access/formats/:id — Remove a custom card format
+app.delete('/api/access/formats/:id', (req, res) => {
+  try {
+    const state = accessService.deleteCustomCardFormat(req.params.id);
+    res.json({
+      ok: true,
+      customCardFormats: state.customCardFormats,
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/access/schedules — Create/update a schedule
+app.post('/api/access/schedules', parseJsonBody, (req, res) => {
+  try {
+    const state = accessService.upsertSchedule(req.body || {});
+    res.json({
+      ok: true,
+      schedules: state.schedules,
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// DELETE /api/access/schedules/:id — Remove a schedule
+app.delete('/api/access/schedules/:id', (req, res) => {
+  try {
+    const state = accessService.deleteSchedule(req.params.id);
+    res.json({
+      ok: true,
+      schedules: state.schedules,
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/access/users — Create/update a user credential
+app.post('/api/access/users', parseJsonBody, (req, res) => {
+  try {
+    const state = accessService.upsertUser(req.body || {});
+    res.json({
+      ok: true,
+      users: state.users,
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// DELETE /api/access/users/:id — Remove a user credential
+app.delete('/api/access/users/:id', (req, res) => {
+  try {
+    const state = accessService.deleteUser(req.params.id);
+    res.json({
+      ok: true,
+      users: state.users,
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// GET /api/access/preview/:linkId — Build the ENGAGE database payload for one lock
+app.get('/api/access/preview/:linkId', (req, res) => {
+  try {
+    const linkId = req.params.linkId;
+    const lockInfo = findLock(linkId, req.query.gateway_sn || null);
+    if (!lockInfo) {
+      return res.status(404).json({ error: `Lock ${linkId} was not found` });
+    }
+    res.json({
+      lock: lockInfo,
+      preview: accessService.buildPreview(linkId),
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// GET /api/access/status/:linkId — Read current database transfer status
+app.get('/api/access/status/:linkId', async (req, res) => {
+  const linkId = req.params.linkId;
+  const lockInfo = findLock(linkId, req.query.gateway_sn || null);
+  if (!lockInfo) {
+    return res.status(404).json({ error: `Lock ${linkId} was not found` });
+  }
+
+  try {
+    const liveStatus = await fetchDbDownloadStatus(lockInfo.sn, linkId);
+    const next = updateDatabasePushState(linkId, {
+      sn: lockInfo.sn,
+      status: liveStatus.state,
+      progress: liveStatus.progress,
+      rawStatus: liveStatus.raw,
+      responseStatus: liveStatus.responseStatus,
+    });
+    res.json(next);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/access/push/:linkId — Push a full ENGAGE access database to one lock
+app.post('/api/access/push/:linkId', parseJsonBody, async (req, res) => {
+  const linkId = req.params.linkId;
+  const gatewaySn = req.body?.gateway_sn || req.query.gateway_sn || null;
+  const lockInfo = findLock(linkId, gatewaySn);
+  if (!lockInfo) {
+    return res.status(404).json({ error: `Lock ${linkId} was not found` });
+  }
+
+  try {
+    const preview = accessService.buildPreview(linkId);
+    updateDatabasePushState(linkId, {
+      sn: lockInfo.sn,
+      status: 'queued',
+      progress: 0,
+      summary: preview.summary,
+    });
+
+    const response = await request(
+      lockInfo.sn,
+      'PUT',
+      `/edgeDevices/${linkId}/database`,
+      JSON.stringify(preview.payload),
+      20
+    );
+
+    if (!response) {
+      return res.status(503).json({
+        error: 'Gateway did not respond to the database push request',
+        retryable: true,
+      });
+    }
+
+    const rawResponse = parseJsonSafe(response.responseMessageBody);
+    const next = updateDatabasePushState(linkId, {
+      sn: lockInfo.sn,
+      status: String(response.responseStatus) === '200' ? 'in-progress' : 'failed',
+      progress: 0,
+      rawPushResponse: rawResponse ?? response.responseMessageBody,
+      responseStatus: response.responseStatus,
+      summary: preview.summary,
+    });
+    startDbStatusPolling(lockInfo.sn, linkId);
+
+    res.json({
+      ok: String(response.responseStatus) === '200',
+      lock: lockInfo,
+      preview: preview.summary,
+      initialResponse: rawResponse ?? response.responseMessageBody,
+      status: next,
+    });
+  } catch (err) {
+    updateDatabasePushState(linkId, {
+      sn: lockInfo.sn,
+      status: 'failed',
+      error: err.message,
+    });
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// DELETE /api/access/push/:linkId — Cancel an in-flight database transfer
+app.delete('/api/access/push/:linkId', async (req, res) => {
+  const linkId = req.params.linkId;
+  const gatewaySn = req.query.gateway_sn || req.body?.gateway_sn || null;
+  const lockInfo = findLock(linkId, gatewaySn);
+  if (!lockInfo) {
+    return res.status(404).json({ error: `Lock ${linkId} was not found` });
+  }
+
+  try {
+    const response = await request(lockInfo.sn, 'DELETE', `/edgeDevices/${linkId}/database`, '', 15);
+    if (!response) {
+      return res.status(503).json({ error: 'Gateway did not respond to the cancel request' });
+    }
+
+    if (databasePollers.has(linkId)) {
+      clearInterval(databasePollers.get(linkId));
+      databasePollers.delete(linkId);
+    }
+
+    const next = updateDatabasePushState(linkId, {
+      sn: lockInfo.sn,
+      status: 'cancelled',
+      progress: null,
+      responseStatus: response.responseStatus,
+      rawCancelResponse: parseJsonSafe(response.responseMessageBody) ?? response.responseMessageBody,
+    });
+
+    res.json({
+      ok: String(response.responseStatus) === '200',
+      status: next,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST /api/test/disconnect/:sn — Force-close gateway WebSocket (simulates 24h drop)
