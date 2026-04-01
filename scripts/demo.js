@@ -360,6 +360,104 @@ server.on('engage:event', ({ sn, event }) => {
   const audits = Array.isArray(container.audits) ? container.audits : [];
   const firstAudit = audits[0] || {};
 
+  if (audits.length > 1) {
+    const sourceKey = body.edgeDevice ? 'edgeDevice' : (body.gateway ? 'gateway' : null);
+    audits.forEach((auditItem, auditIndex) => {
+      const auditCode = auditItem?.event || event.eventType;
+      const linkId = container.linkId || event.eventDeviceId;
+      const lookup = lookupEvent(auditCode);
+      const auditScopedBody = sourceKey
+        ? {
+            ...body,
+            [sourceKey]: {
+              ...container,
+              audits: [auditItem],
+            },
+          }
+        : body;
+      const mergedAccessBody = {
+        ...body,
+        ...container,
+        ...auditItem,
+      };
+      const entry = {
+        sn,
+        eventType: auditCode,
+        category: lookup.category,
+        title: lookup.title,
+        result: lookup.result,
+        reason: buildReason(auditCode, auditScopedBody),
+        source: event.eventSource,
+        deviceId: linkId,
+        body: typeof event.eventBody === 'string'
+          ? JSON.stringify(auditScopedBody)
+          : auditScopedBody,
+        timestamp: new Date().toISOString(),
+      };
+
+      const lockInfo = linkId ? findLock(linkId, sn) : null;
+      if (lookup.category === 'Access') {
+        const accessLookup = accessService.resolveAccessEvent(linkId, mergedAccessBody);
+        const lockName = lockInfo?.deviceName || linkId || 'Unknown Lock';
+        const detail = entry.title
+          ? entry.title.replace(/^Access Granted(?: \(Pass-Through\)| \(One-Time Use\))?$/i, '').replace(/^Denied\s+[â€”-]\s*/i, '').trim()
+          : '';
+        const prefix = lookup.result === 'granted'
+          ? 'Access granted'
+          : lookup.result === 'denied'
+            ? 'Access denied'
+            : (entry.title || 'Access event');
+
+        let friendlyText = `${prefix} for ${accessLookup.subject} at ${lockName}`;
+        if (lookup.result === 'denied') {
+          const denialDetail = detail || entry.reason || '';
+          if (denialDetail) friendlyText += ` â€” ${denialDetail}`;
+        }
+
+        entry.displaySubject = accessLookup.subject;
+        entry.lockName = lockName;
+        entry.friendlyText = friendlyText;
+        entry.presentedCardNumber = accessLookup.presentedCardNumber || null;
+
+        const accessEvent = {
+          id: `${entry.timestamp}-${sn}-${linkId || 'gateway'}-${auditIndex}`,
+          sn,
+          linkId,
+          lockName,
+          result: lookup.result,
+          title: entry.title,
+          friendlyText,
+          subject: accessLookup.subject,
+          presentedCardNumber: accessLookup.presentedCardNumber || null,
+          timestamp: entry.timestamp,
+          user: accessLookup.user,
+          reason: entry.reason,
+        };
+        recentAccessEvents.unshift(accessEvent);
+        if (recentAccessEvents.length > 25) recentAccessEvents.pop();
+        broadcast('access:event', accessEvent);
+      }
+
+      const LOCK_STATE_MAP = {
+        '0f000000': 'passage',
+        '0f010000': 'secure',
+        '0f020000': 'momentaryUnlock',
+      };
+      const mappedState = auditCode ? LOCK_STATE_MAP[String(auditCode).toLowerCase()] : null;
+      if (mappedState && linkId) {
+        const list = devices.get(sn);
+        if (list) {
+          list.forEach(d => { if (d.linkId === linkId) d.lockState = mappedState; });
+          broadcast('device:list', { sn, devices: list });
+        }
+      }
+
+      auditStore.insert(entry);
+      broadcast('engage:event', entry);
+    });
+    return;
+  }
+
   // Real audit event code lives in audits[0].event (e.g. "0f010000")
   // Fall back to the outer eventType only if audits array is empty
   const auditCode = audits.length > 0 ? audits[0].event : event.eventType;
