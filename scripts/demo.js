@@ -69,6 +69,19 @@ const accessStateStore = new AccessStateStore('./data/access-state.json');
 const accessService = new AccessControlService(accessStateStore, { siteKeyFile: './config/sitekey' });
 const sseClients = new Set(); // active SSE response objects
 const recentAccessEvents = [];
+const LOCK_SETTING_BOOLEAN_KEYS = [
+  'invCrdAudEn',
+  'auditIDEn',
+  'proxConfHID',
+  'proxConfGECASI',
+  'proxConfAWID',
+  'uid14443',
+  'mi14443',
+  'mip14443',
+  'noc14443',
+  'uid15693',
+  'iClsUID40b',
+];
 const databasePushStates = new Map(); // linkId → status object
 const databasePollers = new Map(); // linkId → interval handle
 
@@ -126,6 +139,109 @@ function parseJsonSafe(raw) {
   } catch {
     return null;
   }
+}
+
+function normalizeTfFlag(value) {
+  if (value === true || value === false) return value;
+  if (value === 1 || value === 0) return value === 1;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['t', 'true', '1', 'yes', 'on', 'enabled'].includes(normalized)) return true;
+    if (['f', 'false', '0', 'no', 'off', 'disabled'].includes(normalized)) return false;
+  }
+  return null;
+}
+
+function toTfFlag(value) {
+  return normalizeTfFlag(value) ? 'T' : 'F';
+}
+
+function extractLockSettingsSource(parsed) {
+  const candidates = [];
+  const pushCandidate = (value) => {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      candidates.push(value);
+    }
+  };
+
+  pushCandidate(parsed);
+  pushCandidate(parsed?.params);
+  pushCandidate(parsed?.config);
+  pushCandidate(parsed?.edgeDeviceParams);
+  pushCandidate(parsed?.edgeDeviceParams?.params);
+  pushCandidate(parsed?.edgeDeviceParams?.config);
+  pushCandidate(parsed?.edgeDeviceConfig);
+  pushCandidate(parsed?.edgeDeviceConfig?.params);
+  pushCandidate(parsed?.edgeDeviceConfig?.config);
+  pushCandidate(parsed?.readerParams);
+  pushCandidate(parsed?.readerParameters);
+  pushCandidate(parsed?.lockParams);
+  pushCandidate(parsed?.lockParameters);
+  pushCandidate(parsed?.data);
+  pushCandidate(parsed?.data?.params);
+  pushCandidate(parsed?.data?.config);
+
+  return Object.assign({}, ...candidates);
+}
+
+function normalizeLockSettings(responseBody) {
+  const parsed = parseJsonSafe(responseBody) || {};
+  const source = extractLockSettingsSource(parsed);
+  const values = {};
+  const supported = {};
+
+  for (const key of LOCK_SETTING_BOOLEAN_KEYS) {
+    const normalized = normalizeTfFlag(source[key]);
+    supported[key] = normalized !== null;
+    values[key] = normalized ?? false;
+  }
+
+  const ge4001 = normalizeTfFlag(source.proxConfGE4001);
+  const ge4002 = normalizeTfFlag(source.proxConfGE4002);
+  supported.geProxFormat = ge4001 !== null || ge4002 !== null;
+  values.geProxFormat = ge4002 ? '4002' : ge4001 ? '4001' : 'disabled';
+
+  return {
+    values,
+    supported,
+    raw: parsed,
+  };
+}
+
+function buildLockSettingsConfig(values) {
+  if (!values || typeof values !== 'object') {
+    throw new Error('Lock setting values are required');
+  }
+
+  const config = {};
+  for (const key of LOCK_SETTING_BOOLEAN_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
+    const normalized = normalizeTfFlag(values[key]);
+    if (normalized === null) {
+      throw new Error(`Setting ${key} must be enabled or disabled`);
+    }
+    config[key] = toTfFlag(normalized);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(values, 'geProxFormat')) {
+    const geFormat = String(values.geProxFormat || 'disabled').trim().toLowerCase();
+    if (!['disabled', '4001', '4002'].includes(geFormat)) {
+      throw new Error('GE prox format must be 4001, 4002, or disabled');
+    }
+    config.proxConfGE4001 = geFormat === '4001' ? 'T' : 'F';
+    config.proxConfGE4002 = geFormat === '4002' ? 'T' : 'F';
+  }
+
+  if (Object.keys(config).length === 0) {
+    throw new Error('No lock settings were provided');
+  }
+
+  return { config };
+}
+
+function responseErrorMessage(response, fallback) {
+  const parsed = parseJsonSafe(response?.responseMessageBody);
+  return parsed?.error || fallback;
 }
 
 function normalizeDbDownloadStatus(responseStatus, responseBody) {
@@ -808,6 +924,95 @@ app.get('/api/access/preview/:linkId', (req, res) => {
 });
 
 // GET /api/access/status/:linkId — Read current database transfer status
+// GET /api/access/lock-settings/:linkId â€” Fetch current reader/audit settings for one lock
+app.get('/api/access/lock-settings/:linkId', async (req, res) => {
+  const linkId = req.params.linkId;
+  const lockInfo = findLock(linkId, req.query.gateway_sn || null);
+  if (!lockInfo) {
+    return res.status(404).json({ error: `Lock ${linkId} was not found` });
+  }
+
+  try {
+    const response = await request(lockInfo.sn, 'GET', `/edgeDevices/${linkId}/params`, '', 15);
+    if (!response) {
+      return res.status(503).json({ error: 'Gateway did not respond to the lock settings request' });
+    }
+    if (String(response.responseStatus) !== '200') {
+      const statusCode = Number.parseInt(response.responseStatus, 10);
+      return res.status(Number.isFinite(statusCode) ? statusCode : 502).json({
+        error: responseErrorMessage(response, `Lock settings request failed (${response.responseStatus})`),
+      });
+    }
+
+    res.json({
+      ok: true,
+      lock: lockInfo,
+      settings: {
+        ...normalizeLockSettings(response.responseMessageBody),
+        fetchedAt: new Date().toISOString(),
+        responseStatus: response.responseStatus,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/access/lock-settings/:linkId â€” Update reader/audit settings for one lock
+app.put('/api/access/lock-settings/:linkId', parseJsonBody, async (req, res) => {
+  const linkId = req.params.linkId;
+  const gatewaySn = req.body?.gateway_sn || req.query.gateway_sn || null;
+  const lockInfo = findLock(linkId, gatewaySn);
+  if (!lockInfo) {
+    return res.status(404).json({ error: `Lock ${linkId} was not found` });
+  }
+
+  try {
+    const payload = buildLockSettingsConfig(req.body?.values || {});
+    const response = await request(
+      lockInfo.sn,
+      'PUT',
+      `/edgeDevices/${linkId}/config`,
+      JSON.stringify(payload),
+      20
+    );
+
+    if (!response) {
+      return res.status(503).json({ error: 'Gateway did not respond to the lock settings update' });
+    }
+    if (String(response.responseStatus) !== '200') {
+      const statusCode = Number.parseInt(response.responseStatus, 10);
+      return res.status(Number.isFinite(statusCode) ? statusCode : 502).json({
+        error: responseErrorMessage(response, `Lock settings update failed (${response.responseStatus})`),
+      });
+    }
+
+    let settings = {
+      ...normalizeLockSettings({ config: payload.config }),
+      fetchedAt: new Date().toISOString(),
+      responseStatus: response.responseStatus,
+    };
+
+    const readBack = await request(lockInfo.sn, 'GET', `/edgeDevices/${linkId}/params`, '', 15);
+    if (readBack && String(readBack.responseStatus) === '200') {
+      settings = {
+        ...normalizeLockSettings(readBack.responseMessageBody),
+        fetchedAt: new Date().toISOString(),
+        responseStatus: readBack.responseStatus,
+      };
+    }
+
+    res.json({
+      ok: true,
+      lock: lockInfo,
+      settings,
+      response: parseJsonSafe(response.responseMessageBody) ?? response.responseMessageBody,
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 app.get('/api/access/status/:linkId', async (req, res) => {
   const linkId = req.params.linkId;
   const lockInfo = findLock(linkId, req.query.gateway_sn || null);

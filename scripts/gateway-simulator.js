@@ -55,6 +55,24 @@ const deviceState = {};
 DEVICES.forEach(d => { deviceState[d.linkId] = 'locked'; });
 const databaseTransferState = {};
 const activeDoorfiles = {};
+const lockConfigState = {};
+DEVICES.forEach((device, index) => {
+  lockConfigState[device.linkId] = {
+    invCrdAudEn: index === 0 ? 'F' : 'T',
+    auditIDEn: 'T',
+    proxConfHID: 'T',
+    proxConfGE4001: 'T',
+    proxConfGE4002: 'F',
+    proxConfAWID: 'T',
+    proxConfGECASI: 'T',
+    uid14443: 'F',
+    mi14443: 'T',
+    mip14443: 'T',
+    noc14443: 'T',
+    uid15693: 'T',
+    iClsUID40b: 'T',
+  };
+});
 let activeWs = null;
 
 // ── AES-256-CBC Credential Challenge ─────────────────────────────────────────
@@ -156,6 +174,16 @@ function routeRequest(requestId, method, reqPath, messageBody, ws) {
     return ok(requestId, { linkId, deviceName: dev.deviceName, lockState: deviceState[linkId] });
   }
 
+  // ── GET /edgeDevices/:linkId/params
+  if (method === 'GET' && parts.length === 3 && parts[0] === 'edgeDevices' && parts[2] === 'params') {
+    return getDeviceParams(requestId, parts[1]);
+  }
+
+  // ── PUT /edgeDevices/:linkId/config
+  if (method === 'PUT' && parts.length === 3 && parts[0] === 'edgeDevices' && parts[2] === 'config') {
+    return updateDeviceConfig(requestId, parts[1], messageBody);
+  }
+
   // ── PUT /edgeDevices/lockControl  (broadcast — all devices)
   if ((method === 'PUT' || method === 'POST') && reqPath === '/edgeDevices/lockControl') {
     return applyLockControl(requestId, null, messageBody, /*broadcast=*/true);
@@ -211,6 +239,48 @@ function applyLockControl(requestId, linkId, messageBody, broadcast) {
     printDeviceTable();
     return ok(requestId, { result: 'success', linkId, appliedState: nextState });
   }
+}
+
+function getDeviceParams(requestId, linkId) {
+  if (!(linkId in deviceState)) return err(requestId, '404', `linkId '${linkId}' not found`);
+
+  const dev = DEVICES.find(d => d.linkId === linkId);
+  return ok(requestId, {
+    params: {
+      linkId,
+      deviceName: dev?.deviceName || linkId,
+      modelType: dev?.modelType || 'nde',
+      ...lockConfigState[linkId],
+    },
+  });
+}
+
+function updateDeviceConfig(requestId, linkId, messageBody) {
+  if (!(linkId in deviceState)) return err(requestId, '404', `linkId '${linkId}' not found`);
+
+  let parsed;
+  try {
+    parsed = JSON.parse(messageBody);
+  } catch (e) {
+    return err(requestId, '400', `invalid config payload: ${e.message}`);
+  }
+
+  const config = parsed?.config;
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    return err(requestId, '400', 'config payload is required');
+  }
+
+  lockConfigState[linkId] = {
+    ...lockConfigState[linkId],
+    ...config,
+  };
+
+  console.log(`    ✔  Reader settings updated for ${linkId}: ${Object.keys(config).join(', ')}`);
+  return ok(requestId, {
+    result: 'success',
+    linkId,
+    appliedConfig: lockConfigState[linkId],
+  });
 }
 
 function ok(requestId, body) {

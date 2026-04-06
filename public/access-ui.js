@@ -14,6 +14,113 @@
     'enable_corporate_1000_parity_checks',
   ];
 
+  const LOCK_SETTING_DEFAULTS = {
+    invCrdAudEn: false,
+    auditIDEn: false,
+    proxConfHID: false,
+    proxConfGECASI: false,
+    proxConfAWID: false,
+    uid14443: false,
+    mi14443: false,
+    mip14443: false,
+    noc14443: false,
+    uid15693: false,
+    iClsUID40b: false,
+    geProxFormat: 'disabled',
+  };
+
+  const LOCK_SETTING_GROUPS = [
+    {
+      title: 'Audit Visibility',
+      helper: 'Turn on invalid credential audit if you want denied or unknown card swipes to create audits on the lock.',
+      items: [
+        {
+          key: 'invCrdAudEn',
+          type: 'toggle',
+          label: 'Invalid credential audit',
+          note: 'Emit denied and unknown-card audit events from the lock.',
+        },
+        {
+          key: 'auditIDEn',
+          type: 'toggle',
+          label: 'Audit ID tracking',
+          note: 'Include audit identifiers for downstream processing.',
+        },
+      ],
+    },
+    {
+      title: 'Reader Technologies',
+      helper: 'Match these reader flags to the card technology this lock should accept.',
+      items: [
+        {
+          key: 'proxConfHID',
+          type: 'toggle',
+          label: 'HID prox',
+          note: 'Enable standard HID prox credentials on the reader.',
+        },
+        {
+          key: 'geProxFormat',
+          type: 'select',
+          label: 'GE prox format',
+          note: 'Choose the supported GE prox bit layout for this lock.',
+          options: [
+            { value: 'disabled', label: 'Disabled' },
+            { value: '4001', label: 'GE 4001' },
+            { value: '4002', label: 'GE 4002' },
+          ],
+        },
+        {
+          key: 'proxConfAWID',
+          type: 'toggle',
+          label: 'AWID prox',
+          note: 'Enable AWID low-frequency prox cards.',
+        },
+        {
+          key: 'proxConfGECASI',
+          type: 'toggle',
+          label: 'GE CASI prox',
+          note: 'Enable GE CASI prox credentials.',
+        },
+        {
+          key: 'uid14443',
+          type: 'toggle',
+          label: '14443 UID',
+          note: 'Read ISO 14443 UID values directly.',
+        },
+        {
+          key: 'mi14443',
+          type: 'toggle',
+          label: 'MIFARE / 14443',
+          note: 'Enable standard MIFARE-based 14443 credentials.',
+        },
+        {
+          key: 'mip14443',
+          type: 'toggle',
+          label: 'MIFARE Plus / 14443',
+          note: 'Enable MIFARE Plus credential support.',
+        },
+        {
+          key: 'noc14443',
+          type: 'toggle',
+          label: 'No-card / 14443',
+          note: 'Enable the configured 14443 no-card mode.',
+        },
+        {
+          key: 'uid15693',
+          type: 'toggle',
+          label: '15693 UID',
+          note: 'Read ISO 15693 UID values directly.',
+        },
+        {
+          key: 'iClsUID40b',
+          type: 'toggle',
+          label: 'iCLASS UID 40-bit',
+          note: 'Enable iCLASS UID 40-bit credential support.',
+        },
+      ],
+    },
+  ];
+
   const accessState = {
     users: [],
     schedules: [],
@@ -24,6 +131,15 @@
     preview: null,
     loaded: false,
     userFormatTouched: false,
+    lockSettingsValues: { ...LOCK_SETTING_DEFAULTS },
+    lockSettingsBaseline: { ...LOCK_SETTING_DEFAULTS },
+    lockSettingsSupported: {},
+    lockSettingsFetchedAt: null,
+    lockSettingsLoading: false,
+    lockSettingsSaving: false,
+    lockSettingsError: '',
+    lockSettingsLockKey: null,
+    lockSettingsRequestToken: 0,
   };
 
   function liveLocks() {
@@ -37,6 +153,54 @@
       lock.linkId === accessState.selectedLockId &&
       lock.sn === accessState.selectedGatewaySn
     ) || null;
+  }
+
+  function lockKey(lock) {
+    return lock ? `${lock.sn}:${lock.linkId}` : null;
+  }
+
+  function cloneLockSettingsValues(values = {}) {
+    return {
+      ...LOCK_SETTING_DEFAULTS,
+      ...values,
+      geProxFormat: ['4001', '4002', 'disabled'].includes(String(values.geProxFormat || '').trim())
+        ? String(values.geProxFormat).trim()
+        : 'disabled',
+    };
+  }
+
+  function setLockSettingsState(payload = {}) {
+    accessState.lockSettingsValues = cloneLockSettingsValues(payload.values || {});
+    accessState.lockSettingsBaseline = cloneLockSettingsValues(payload.values || {});
+    accessState.lockSettingsSupported = { ...(payload.supported || {}) };
+    accessState.lockSettingsFetchedAt = payload.fetchedAt || null;
+    accessState.lockSettingsError = '';
+  }
+
+  function lockSettingsSignature(values) {
+    return JSON.stringify(cloneLockSettingsValues(values || {}));
+  }
+
+  function hasLockSettingsChanges() {
+    return lockSettingsSignature(accessState.lockSettingsValues) !== lockSettingsSignature(accessState.lockSettingsBaseline);
+  }
+
+  function expandAccessSection(collapseKey) {
+    const header = document.querySelector(`.section-header.collapsible[data-collapse-key="${collapseKey}"]`);
+    if (!header) return;
+    const body = header.nextElementSibling;
+    header.classList.remove('collapsed');
+    if (body) body.classList.remove('collapsed');
+    try {
+      sessionStorage.removeItem(`collapse_${collapseKey}`);
+    } catch {
+      // ignore session storage issues
+    }
+  }
+
+  function expandLockSettingsSections() {
+    expandAccessSection('lock-settings');
+    expandAccessSection('lock-settings-live');
   }
 
   function isUnsupportedFormat(format) {
@@ -369,7 +533,7 @@
     }
 
     ensureSelection();
-    await refreshPreview();
+    await Promise.all([refreshPreview(), refreshLockSettings()]);
     renderAll();
   }
 
@@ -384,6 +548,48 @@
       accessState.preview = data.preview;
     } catch (err) {
       accessState.preview = { error: err.message };
+    }
+  }
+
+  async function refreshLockSettings() {
+    const lock = selectedLock();
+    accessState.lockSettingsRequestToken += 1;
+    const token = accessState.lockSettingsRequestToken;
+
+    if (!lock) {
+      accessState.lockSettingsValues = cloneLockSettingsValues();
+      accessState.lockSettingsBaseline = cloneLockSettingsValues();
+      accessState.lockSettingsSupported = {};
+      accessState.lockSettingsFetchedAt = null;
+      accessState.lockSettingsError = '';
+      accessState.lockSettingsLoading = false;
+      accessState.lockSettingsSaving = false;
+      accessState.lockSettingsLockKey = null;
+      return;
+    }
+
+    accessState.lockSettingsLoading = true;
+    accessState.lockSettingsError = '';
+    accessState.lockSettingsLockKey = lockKey(lock);
+    expandLockSettingsSections();
+    renderLockSettings();
+
+    try {
+      const data = await api(`/api/access/lock-settings/${encodeURIComponent(lock.linkId)}?gateway_sn=${encodeURIComponent(lock.sn)}`);
+      if (token !== accessState.lockSettingsRequestToken || accessState.lockSettingsLockKey !== lockKey(lock)) return;
+      setLockSettingsState(data.settings || {});
+    } catch (err) {
+      if (token !== accessState.lockSettingsRequestToken || accessState.lockSettingsLockKey !== lockKey(lock)) return;
+      accessState.lockSettingsError = err.message;
+      accessState.lockSettingsValues = cloneLockSettingsValues();
+      accessState.lockSettingsBaseline = cloneLockSettingsValues();
+      accessState.lockSettingsSupported = {};
+      accessState.lockSettingsFetchedAt = null;
+    } finally {
+      if (token === accessState.lockSettingsRequestToken && accessState.lockSettingsLockKey === lockKey(lock)) {
+        accessState.lockSettingsLoading = false;
+        renderLockSettings();
+      }
     }
   }
 
@@ -413,12 +619,12 @@
     el.innerHTML = locks.map(lock => {
       const selected = lock.linkId === accessState.selectedLockId && lock.sn === accessState.selectedGatewaySn;
       const push = pushStateFor(lock.linkId);
+      const syncStatus = push ? String(push.status || 'unknown') : 'idle';
       return `
         <button class="access-lock-item ${selected ? 'selected' : ''}" onclick="window.accessUI.selectLock('${esc(lock.linkId)}','${esc(lock.sn)}')">
           <div class="access-lock-title">${esc(lock.deviceName || lock.linkId)}</div>
-          <div class="access-lock-meta">${esc(lock.linkId)} | ${esc(lock.sn)}</div>
-          <div class="access-lock-meta">State: ${esc(lock.lockState || '?')}</div>
-          <div class="access-lock-status">${push ? esc(push.status || 'unknown') : 'idle'}</div>
+          <div class="access-lock-meta">${esc(lock.linkId)}</div>
+          <div class="access-lock-status">${esc(lock.lockState || '?')} · ${esc(syncStatus)}</div>
         </button>
       `;
     }).join('');
@@ -561,6 +767,140 @@
     pre.textContent = JSON.stringify(preview.payload, null, 2);
   }
 
+  function lockSettingsPayload() {
+    const payload = {};
+    Object.entries(accessState.lockSettingsSupported || {}).forEach(([key, supported]) => {
+      if (!supported) return;
+      payload[key] = accessState.lockSettingsValues[key];
+    });
+    return payload;
+  }
+
+  function renderLockSettings() {
+    const boxes = Array.from(document.querySelectorAll('[data-lock-settings-host="true"]'));
+    if (boxes.length === 0) return;
+    const setHtml = (html) => boxes.forEach(box => { box.innerHTML = html; });
+
+    try {
+      const lock = selectedLock();
+      if (!lock) {
+        setHtml('<div class="access-empty">Select a target lock to read and update reader settings.</div>');
+        return;
+      }
+
+      if (accessState.lockSettingsLoading) {
+        setHtml('<div class="access-empty">Loading current lock settings...</div>');
+        return;
+      }
+
+      if (accessState.lockSettingsError) {
+        setHtml(`
+          <div class="lock-settings-banner error">${esc(accessState.lockSettingsError)}</div>
+          <div class="lock-settings-toolbar">
+            <button class="mini-btn" type="button" onclick="window.accessUI.refreshLockSettings()">Refresh From Lock</button>
+          </div>
+        `);
+        return;
+      }
+
+      const dirty = hasLockSettingsChanges();
+      const fetchedAt = accessState.lockSettingsFetchedAt ? fmtTimestamp(accessState.lockSettingsFetchedAt) : 'Not fetched yet';
+      const supportedCount = Object.values(accessState.lockSettingsSupported || {}).filter(Boolean).length;
+      if (supportedCount === 0) {
+        setHtml(`
+          <div class="lock-settings-banner warn">No lock settings were returned for this device yet.</div>
+          <div class="lock-settings-toolbar">
+            <div class="lock-settings-meta">
+              <div class="lock-settings-lock">${esc(lock.deviceName || lock.linkId)} <span>${esc(lock.linkId)}</span></div>
+              <div class="lock-settings-fetched">Fetched ${esc(fetchedAt)}</div>
+            </div>
+            <div class="lock-settings-actions">
+              <button class="mini-btn" type="button" onclick="window.accessUI.refreshLockSettings()">Refresh From Lock</button>
+            </div>
+          </div>
+        `);
+        return;
+      }
+      const groups = LOCK_SETTING_GROUPS.map(group => `
+        <div class="lock-settings-group">
+          <div class="lock-settings-group-title">${esc(group.title)}</div>
+          <div class="lock-settings-group-helper">${esc(group.helper)}</div>
+          ${group.items.map(item => {
+            const supported = !!accessState.lockSettingsSupported[item.key];
+            if (item.type === 'select') {
+              const options = item.options.map(option => `
+                <option value="${esc(option.value)}" ${String(accessState.lockSettingsValues[item.key]) === String(option.value) ? 'selected' : ''}>
+                  ${esc(option.label)}
+                </option>
+              `).join('');
+
+              return `
+                <div class="lock-setting-row ${supported ? '' : 'disabled'}">
+                  <div class="lock-setting-copy">
+                    <div class="lock-setting-label">${esc(item.label)}</div>
+                    <div class="lock-setting-note">${esc(item.note)}</div>
+                  </div>
+                  <div class="lock-setting-control">
+                    <select class="lock-setting-select" ${supported ? '' : 'disabled'} onchange="window.accessUI.setGeProxFormat(this.value)">
+                      ${options}
+                    </select>
+                    ${supported ? '' : '<div class="lock-setting-support">Unavailable on this lock</div>'}
+                  </div>
+                </div>
+              `;
+            }
+
+            return `
+              <div class="lock-setting-row ${supported ? '' : 'disabled'}">
+                <div class="lock-setting-copy">
+                  <div class="lock-setting-label">${esc(item.label)}</div>
+                  <div class="lock-setting-note">${esc(item.note)}</div>
+                </div>
+                <div class="lock-setting-control">
+                  <label class="lock-setting-toggle">
+                    <input
+                      type="checkbox"
+                      ${accessState.lockSettingsValues[item.key] ? 'checked' : ''}
+                      ${supported ? '' : 'disabled'}
+                      onchange="window.accessUI.setLockSetting('${esc(item.key)}', this.checked)"
+                    >
+                    <span>${accessState.lockSettingsValues[item.key] ? 'Enabled' : 'Disabled'}</span>
+                  </label>
+                  ${supported ? '' : '<div class="lock-setting-support">Unavailable on this lock</div>'}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `).join('');
+
+      setHtml(`
+        <div class="lock-settings-toolbar">
+          <div class="lock-settings-meta">
+            <div class="lock-settings-lock">${esc(lock.deviceName || lock.linkId)} <span>${esc(lock.linkId)}</span></div>
+            <div class="lock-settings-fetched">Fetched ${esc(fetchedAt)}</div>
+          </div>
+          <div class="lock-settings-actions">
+            <button class="mini-btn" type="button" onclick="window.accessUI.refreshLockSettings()">Refresh From Lock</button>
+            <button class="mini-btn lock-settings-primary" type="button" onclick="window.accessUI.saveLockSettings()" ${dirty && !accessState.lockSettingsSaving ? '' : 'disabled'}>
+              ${accessState.lockSettingsSaving ? 'Saving...' : dirty ? 'Save Changes' : 'No Changes'}
+            </button>
+          </div>
+        </div>
+        ${dirty ? '<div class="lock-settings-banner warn">Unsaved reader-setting changes for this lock.</div>' : '<div class="lock-settings-banner success">Reader settings match the last values fetched from the lock.</div>'}
+        ${groups}
+      `);
+    } catch (err) {
+      console.error('Lock settings render failed', err);
+      setHtml(`
+        <div class="lock-settings-banner error">Lock settings could not be rendered: ${esc(err.message || 'Unknown error')}</div>
+        <div class="lock-settings-toolbar">
+          <button class="mini-btn" type="button" onclick="window.accessUI.refreshLockSettings()">Refresh From Lock</button>
+        </div>
+      `);
+    }
+  }
+
   function renderStatus() {
     const box = document.getElementById('access-transfer-status');
     const lock = selectedLock();
@@ -610,6 +950,7 @@
     renderUsers();
     renderSchedules();
     renderFormats();
+    renderLockSettings();
     renderPreview();
     renderStatus();
     renderRecentSwipes();
@@ -1002,6 +1343,47 @@
     }
   }
 
+  function setBooleanLockSetting(key, checked) {
+    accessState.lockSettingsValues = {
+      ...accessState.lockSettingsValues,
+      [key]: !!checked,
+    };
+    renderLockSettings();
+  }
+
+  function setGeProxFormat(value) {
+    accessState.lockSettingsValues = {
+      ...accessState.lockSettingsValues,
+      geProxFormat: ['4001', '4002'].includes(String(value)) ? String(value) : 'disabled',
+    };
+    renderLockSettings();
+  }
+
+  async function saveLockSettings() {
+    const lock = selectedLock();
+    if (!lock || accessState.lockSettingsSaving || !hasLockSettingsChanges()) return;
+
+    accessState.lockSettingsSaving = true;
+    renderLockSettings();
+
+    try {
+      const data = await api(`/api/access/lock-settings/${encodeURIComponent(lock.linkId)}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          gateway_sn: lock.sn,
+          values: lockSettingsPayload(),
+        }),
+      });
+      setLockSettingsState(data.settings || {});
+      showToast(`Reader settings updated for ${lock.deviceName || lock.linkId}`, 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      accessState.lockSettingsSaving = false;
+      renderLockSettings();
+    }
+  }
+
   function bindEvents() {
     document.getElementById('mode-live').addEventListener('click', () => switchView('live'));
     document.getElementById('mode-access').addEventListener('click', () => switchView('access'));
@@ -1027,8 +1409,12 @@
     selectLock(linkId, sn) {
       accessState.selectedLockId = linkId;
       accessState.selectedGatewaySn = sn;
-      refreshPreview().then(renderAll);
+      Promise.all([refreshPreview(), refreshLockSettings()]).then(renderAll);
     },
+    refreshLockSettings,
+    saveLockSettings,
+    setLockSetting: setBooleanLockSetting,
+    setGeProxFormat,
     openUserModal,
     openScheduleModal,
     openFormatModal,
