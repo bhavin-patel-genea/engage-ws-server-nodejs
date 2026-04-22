@@ -20,7 +20,7 @@ function defaultSchedule() {
     days: [...DAY_ORDER],
     strtHr: 0,
     strtMn: 0,
-    lngth: 1439,
+    lngth: 1440,
     lockIds: [],
     isDefault: true,
     createdAt: ts,
@@ -97,7 +97,9 @@ class AccessStateStore {
       existing.days = Array.isArray(existing.days) && existing.days.length > 0 ? existing.days : [...DAY_ORDER];
       existing.strtHr = existing.strtHr ?? 0;
       existing.strtMn = existing.strtMn ?? 0;
-      existing.lngth = existing.lngth ?? 1439;
+      // Allegion training samples all use 1440 for 24x7 schedule.
+      // Spec Table 3 says 1-1439 but Allegion's own working doorfiles use 1440.
+      existing.lngth = (existing.lngth === 1439 || existing.lngth == null) ? 1440 : existing.lngth;
       existing.lockIds = Array.isArray(existing.lockIds) ? existing.lockIds : [];
       if (defaultIdx > 0) {
         this.state.schedules.splice(defaultIdx, 1);

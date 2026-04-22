@@ -273,6 +273,9 @@ function decodeCardFromClearBytes(clearBuffer, format) {
     cardNumber: adjustedCard.toString(),
     facilityCode: facilityCode !== null ? facilityCode.toString() : null,
     formatLabel: format.label || format.value,
+    formatValue: format.value || null,
+    formatSource: format.source || 'builtin',
+    formatId: format.source === 'custom' ? format.id : (format.value || null),
     totalBits,
   };
 }
@@ -292,6 +295,27 @@ function decryptCredentialReport(credHex, siteKeyHexOrBuffer, formats) {
   return { cardNumber: null, facilityCode: null, clearHex: clearBuffer.toString('hex') };
 }
 
+/**
+ * Encrypt a clear PrimeCR hex string (from audit event raw bytes).
+ * This bypasses all card format/FC/card-number logic and uses the exact
+ * bytes the lock read from the card — guaranteeing a match.
+ *
+ * @param {string} clearPrimeCrHex  32-char hex string (16 bytes)
+ * @param {string|Buffer} siteKeyHexOrBuffer
+ * @returns {{ clearHex: string, encryptedHex: string }}
+ */
+function encryptClearPrimeCr(clearPrimeCrHex, siteKeyHexOrBuffer) {
+  const clearBuffer = Buffer.from(String(clearPrimeCrHex).trim(), 'hex');
+  if (clearBuffer.length !== 16) {
+    throw new Error(`clearPrimeCrHex must be exactly 16 bytes (32 hex chars), got ${clearBuffer.length}`);
+  }
+  const encryptedBuffer = encryptPrimeClear(clearBuffer, siteKeyHexOrBuffer);
+  return {
+    clearHex: clearBuffer.toString('hex'),
+    encryptedHex: encryptedBuffer.toString('hex'),
+  };
+}
+
 function maskCardNumber(cardNumber) {
   const digits = String(cardNumber ?? '').trim();
   if (digits.length <= 4) return digits;
@@ -300,6 +324,7 @@ function maskCardNumber(cardNumber) {
 
 module.exports = {
   generatePrimeCredential,
+  encryptClearPrimeCr,
   decryptCredentialReport,
   maskCardNumber,
   validateFormatSupport,

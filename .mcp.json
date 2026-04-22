@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "engage-ws": {
+      "command": "node",
+      "args": ["C:/Genea/Projects/poc/engage-ws-server-nodejs/mcp/dist/index.js"],
+      "env": {
+        "ENGAGE_BASE_URL": "https://localhost:8999",
+        "NODE_TLS_REJECT_UNAUTHORIZED": "0"
+      }
+    }
+  }
+}

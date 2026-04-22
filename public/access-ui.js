@@ -594,17 +594,34 @@
   }
 
   function switchView(mode) {
-    const live = document.getElementById('live-view');
-    const access = document.getElementById('access-view');
-    const liveBtn = document.getElementById('mode-live');
-    const accessBtn = document.getElementById('mode-access');
-    const isAccess = mode === 'access';
-    live.hidden = isAccess;
-    access.hidden = !isAccess;
-    liveBtn.classList.toggle('mode-btn-active', !isAccess);
-    accessBtn.classList.toggle('mode-btn-active', isAccess);
-    if (isAccess && !accessState.loaded) refreshState();
-    if (isAccess) renderAll();
+    const views = {
+      live: document.getElementById('live-view'),
+      access: document.getElementById('access-view'),
+      playground: document.getElementById('playground-view'),
+    };
+    const buttons = {
+      live: document.getElementById('mode-live'),
+      access: document.getElementById('mode-access'),
+      playground: document.getElementById('mode-playground'),
+    };
+    for (const [key, el] of Object.entries(views)) {
+      if (el) {
+        const isActive = key === mode;
+        el.hidden = !isActive;
+        el.setAttribute('aria-hidden', String(!isActive));
+      }
+    }
+    for (const [key, btn] of Object.entries(buttons)) {
+      if (btn) {
+        const isActive = key === mode;
+        btn.classList.toggle('mode-btn-active', isActive);
+        btn.setAttribute('aria-selected', String(isActive));
+        btn.setAttribute('tabindex', isActive ? '0' : '-1');
+      }
+    }
+    if (mode === 'access' && !accessState.loaded) refreshState();
+    if (mode === 'access') renderAll();
+    if (mode === 'playground' && window.playgroundUI) window.playgroundUI.onActivated();
   }
 
   function renderLocks() {
@@ -763,7 +780,8 @@
     const scheduleMappings = (preview.scheduleMappings || [])
       .map(item => `${item.wireIndex}:${item.name}`)
       .join(', ');
-    summary.textContent = `Users: ${summaryData.userCount || 0} | Schedules: ${summaryData.scheduleCount || 0} | Wire order: ${scheduleMappings || 'none'}`;
+    summary.innerHTML = `Users: ${summaryData.userCount || 0} | Schedules: ${summaryData.scheduleCount || 0} | Wire order: ${esc(scheduleMappings || 'none')}
+      <button class="mini-btn" type="button" style="margin-left:8px;font-size:10px;padding:2px 8px;vertical-align:middle" onclick="window.accessUI.viewPreviewPayload()">&#x1F50D; View Full</button>`;
     pre.textContent = JSON.stringify(preview.payload, null, 2);
   }
 
@@ -915,34 +933,68 @@
       return;
     }
 
+    const statusColor = push.status === 'failed' ? 'var(--red)' : push.status === 'completed' ? 'var(--green)' : push.status === 'in-progress' ? 'var(--yellow)' : 'var(--text)';
+
+    // Build request payload section
+    const reqPayload = push.requestPayload || push.pushResult?.requestPayload;
+    const reqJson = reqPayload ? JSON.stringify(reqPayload, null, 2) : null;
+    const reqSection = reqJson
+      ? `<div class="status-detail-section">
+          <div class="status-detail-label">Request Payload (PUT /edgeDevices/${esc(lock.linkId)}/database)
+            <button class="mini-btn" type="button" style="margin-left:6px;font-size:9px;padding:1px 6px" onclick="window.accessUI.viewStatusDetail('request')">View Full</button>
+          </div>
+          <pre class="status-detail-json" style="max-height:150px">${esc(reqJson)}</pre>
+        </div>`
+      : '';
+
+    // Build response section
+    const rawResp = push.rawPushResponse || push.pushResult?.initialResponse;
+    const respJson = rawResp ? (typeof rawResp === 'string' ? rawResp : JSON.stringify(rawResp, null, 2)) : null;
+    const respSection = respJson
+      ? `<div class="status-detail-section">
+          <div class="status-detail-label">Gateway Response (HTTP ${esc(String(push.responseStatus || push.pushResult?.status?.responseStatus || '?'))})
+            <button class="mini-btn" type="button" style="margin-left:6px;font-size:9px;padding:1px 6px" onclick="window.accessUI.viewStatusDetail('response')">View Full</button>
+          </div>
+          <pre class="status-detail-json" style="max-height:120px">${esc(respJson)}</pre>
+        </div>`
+      : '';
+
+    // Build error section
+    const errorSection = push.error
+      ? `<div class="status-detail-section">
+          <div class="status-detail-label" style="color:var(--red)">Error</div>
+          <pre class="status-detail-json" style="border-color:rgba(239,68,68,.3)">${esc(push.error)}</pre>
+        </div>`
+      : '';
+
+    // Raw status from polling (dbDownloadStatus)
+    const rawStatus = push.rawStatus;
+    const rawStatusJson = rawStatus ? (typeof rawStatus === 'string' ? rawStatus : JSON.stringify(rawStatus, null, 2)) : null;
+    const rawStatusSection = rawStatusJson
+      ? `<div class="status-detail-section">
+          <div class="status-detail-label">Lock Download Status (dbDownloadStatus)
+            <button class="mini-btn" type="button" style="margin-left:6px;font-size:9px;padding:1px 6px" onclick="window.accessUI.viewStatusDetail('liveStatus')">View Full</button>
+          </div>
+          <pre class="status-detail-json" style="max-height:120px">${esc(rawStatusJson)}</pre>
+        </div>`
+      : '';
+
     box.innerHTML = `
-      <div class="status-line"><span>Status</span><strong>${esc(push.status || 'unknown')}</strong></div>
+      <div class="status-line"><span>Status</span><strong style="color:${statusColor}">${esc(push.status || 'unknown')}</strong></div>
       <div class="status-line"><span>Gateway</span><strong>${esc(push.sn || lock.sn)}</strong></div>
       <div class="status-line"><span>Progress</span><strong>${push.progress !== null && push.progress !== undefined ? `${esc(String(push.progress))}%` : '-'}</strong></div>
       <div class="status-line"><span>Updated</span><strong>${esc(push.updatedAt || '-')}</strong></div>
+      ${errorSection}
+      ${reqSection}
+      ${respSection}
+      ${rawStatusSection}
+      <div style="margin-top:8px;display:flex;gap:6px">
+        <button class="mini-btn" type="button" style="font-size:10px;flex:1" onclick="window.accessUI.refreshStatus()">&#x1F504; Refresh Status</button>
+        <button class="mini-btn" type="button" style="font-size:10px;flex:1" onclick="window.accessUI.pullDatabase()">&#x1F4E5; Pull Lock DB</button>
+      </div>
     `;
   }
 
-  function renderRecentSwipes() {
-    const box = document.getElementById('access-swipe-feed');
-    const items = state.recentAccessEvents || [];
-    if (items.length === 0) {
-      box.innerHTML = '<div class="access-empty">No swipe activity yet.</div>';
-      return;
-    }
-
-    box.innerHTML = items.slice(0, 10).map(item => {
-      const cardInfo = item.presentedCardNumber
-        ? `<div class="swipe-card" style="font-size:10px;color:var(--text-muted);margin-top:2px">Card: ${esc(item.presentedCardNumber)}${item.decodedCredential?.facilityCode ? ` | FC: ${esc(item.decodedCredential.facilityCode)}` : ''}</div>`
-        : '';
-      return `
-      <div class="swipe-item ${esc(item.result || 'info')}">
-        <div class="swipe-result">${esc((item.result || 'info').toUpperCase())}</div>
-        <div class="swipe-text">${esc(item.friendlyText || item.title || 'Access event')}${cardInfo}</div>
-        <div class="swipe-time">${esc(fmtTimestamp(item.timestamp))}</div>
-      </div>`;
-    }).join('');
-  }
 
   function renderAll() {
     ensureSelection();
@@ -953,7 +1005,6 @@
     renderLockSettings();
     renderPreview();
     renderStatus();
-    renderRecentSwipes();
   }
 
   function fillLockChecklist(containerId, selectedIds) {
@@ -1113,6 +1164,43 @@
     fillLockChecklist('access-user-locks', user?.lockIds || []);
     refreshUserFormatHint(true);
     openModal('access-user-modal');
+  }
+
+  async function addUserFromSwipe(jsonStr) {
+    try {
+      const data = JSON.parse(jsonStr);
+
+      // Ensure access state is loaded (card formats, locks, schedules)
+      if (!accessState.loaded) await refreshState();
+
+      // Switch to Access Database tab so the modal renders in the right context
+      switchView('access');
+
+      // If we have an explicit format from decoded credential, use it.
+      // Otherwise match the card bit count to the best built-in format.
+      let presetSource = data.formatSource || null;
+      let presetId = data.formatId || null;
+      if (!presetSource && data.cardBitCount) {
+        const bitMatch = cardFormats().find(f =>
+          f.payload && Number(f.payload.total_card_bits) === Number(data.cardBitCount)
+        );
+        if (bitMatch) {
+          presetSource = bitMatch.source;
+          presetId = bitMatch.source === 'custom' ? bitMatch.id : bitMatch.value;
+        }
+      }
+
+      openUserModal(null, presetSource, presetId);
+      document.getElementById('access-user-card').value = data.cardNumber || '';
+      document.getElementById('access-user-facility').value = data.facilityCode || '';
+      if (data.linkId) {
+        const cb = document.querySelector(`#access-user-locks input[value="${data.linkId}"]`);
+        if (cb) cb.checked = true;
+      }
+      refreshUserFormatHint(true);
+    } catch (err) {
+      showToast('Could not pre-fill user from swipe data', 'error');
+    }
   }
 
   function openScheduleModal(scheduleId = null) {
@@ -1305,10 +1393,18 @@
     const lock = selectedLock();
     if (!lock) return;
     try {
-      await api(`/api/access/push/${encodeURIComponent(lock.linkId)}`, {
+      const result = await api(`/api/access/push/${encodeURIComponent(lock.linkId)}`, {
         method: 'POST',
         body: JSON.stringify({ gateway_sn: lock.sn }),
       });
+      // Store full push result for Transfer Status display
+      if (result && lock.linkId) {
+        state.databasePushStates[lock.linkId] = {
+          ...(state.databasePushStates[lock.linkId] || {}),
+          ...result.status,
+          pushResult: result,
+        };
+      }
       showToast(`Database push started for ${lock.deviceName || lock.linkId}`, 'success');
       await refreshPreview();
       renderAll();
@@ -1341,6 +1437,92 @@
     } catch (err) {
       showToast(err.message, 'error');
     }
+  }
+
+  async function pullDatabase() {
+    const lock = selectedLock();
+    if (!lock) { showToast('Select a lock first', 'warn'); return; }
+    try {
+      showToast(`Checking lock status for ${lock.deviceName || lock.linkId}...`, 'info', 3000);
+      const result = await api(`/api/access/status/${encodeURIComponent(lock.linkId)}?gateway_sn=${encodeURIComponent(lock.sn)}`);
+      // Update local push state so status panel also refreshes
+      if (result && lock.linkId) {
+        state.databasePushStates[lock.linkId] = {
+          ...(state.databasePushStates[lock.linkId] || {}),
+          ...result,
+        };
+      }
+      renderStatus();
+      openJsonModal('Lock DB Status — ' + (lock.deviceName || lock.linkId), result);
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  async function clearDatabase() {
+    const lock = selectedLock();
+    if (!lock) { showToast('Select a lock first', 'warn'); return; }
+    if (!confirm(`This will DELETE ALL credentials from "${lock.deviceName || lock.linkId}". Continue?`)) return;
+    try {
+      showToast(`Clearing database on ${lock.deviceName || lock.linkId}...`, 'info', 3000);
+      const result = await api(`/api/access/clear/${encodeURIComponent(lock.linkId)}`, {
+        method: 'POST',
+        body: JSON.stringify({ gateway_sn: lock.sn }),
+      });
+      if (result && lock.linkId) {
+        state.databasePushStates[lock.linkId] = {
+          ...(state.databasePushStates[lock.linkId] || {}),
+          status: 'clearing',
+          requestPayload: result.requestPayload,
+          rawPushResponse: result.initialResponse,
+          responseStatus: result.responseStatus,
+        };
+      }
+      const msg = result.ok
+        ? `Lock database clear started${result.removedLocalUsers ? ` (${result.removedLocalUsers} local user(s) removed)` : ''}`
+        : 'Clear request sent (check status)';
+      showToast(msg, result.ok ? 'success' : 'warn');
+      await refreshState();
+      renderStatus();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  function openJsonModal(title, data) {
+    const modal = document.getElementById('access-json-modal');
+    document.getElementById('access-json-modal-title').textContent = title;
+    document.getElementById('access-json-modal-body').textContent =
+      typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+    modal.classList.add('show');
+  }
+
+  function viewPreviewPayload() {
+    const lock = selectedLock();
+    if (!lock || !accessState.preview?.payload) return;
+    openJsonModal(`Payload Preview — ${lock.deviceName || lock.linkId}`, accessState.preview.payload);
+  }
+
+  function viewTransferStatus() {
+    const lock = selectedLock();
+    if (!lock) return;
+    const push = pushStateFor(lock.linkId);
+    if (!push) return;
+    openJsonModal('Transfer Status — ' + (lock.deviceName || lock.linkId), push);
+  }
+
+  function viewStatusDetail(key) {
+    const lock = selectedLock();
+    if (!lock) return;
+    const push = pushStateFor(lock.linkId);
+    if (!push) return;
+    const dataMap = {
+      request: push.requestPayload || push.pushResult?.requestPayload,
+      response: push.rawPushResponse || push.pushResult?.initialResponse,
+      liveStatus: push.rawStatus,
+    };
+    const titles = { request: 'Request Payload', response: 'Gateway Response', liveStatus: 'Lock Download Status' };
+    if (dataMap[key]) openJsonModal(titles[key], dataMap[key]);
   }
 
   function setBooleanLockSetting(key, checked) {
@@ -1403,6 +1585,62 @@
     document.getElementById('access-format-suppress-fc').addEventListener('change', toggleFormatFacilityInputs);
   }
 
+  // ── Learn Card from Swipe ──────────────────────────────────────────────────
+  // Per Allegion training: swipe a card (denied) → capture raw bytes from audit events
+  // → use those exact bytes to build PrimeCR → push → card now works!
+
+  async function learnCardFromSwipe() {
+    const lock = selectedLock();
+    if (!lock) { showToast('Select a lock first', 'warn'); return; }
+    try {
+      showToast('Checking for last denied card...', 'info', 2000);
+      const result = await api(`/api/access/last-denied/${encodeURIComponent(lock.linkId)}`);
+      if (!result.ok) {
+        showToast(result.message || 'No denied card found. Swipe a card on the lock first!', 'warn', 5000);
+        return;
+      }
+      const info = [
+        `Card Bit Count: ${result.cardBitCount}`,
+        `Raw Card Hex: ${result.rawCardHex}`,
+        `Clear PrimeCR: ${result.clearPrimeCrHex}`,
+        `Encrypted PrimeCR: ${result.encryptedPrimeCrHex || '(no site key)'}`,
+        result.cardNumber ? `Decoded Card #: ${result.cardNumber}` : null,
+        result.facilityCode ? `Decoded FC: ${result.facilityCode}` : null,
+        `Captured: ${result.timestamp}`,
+      ].filter(Boolean).join('\n');
+
+      if (confirm(`Last denied card on ${lock.deviceName || lock.linkId}:\n\n${info}\n\nEnroll this card? (Push to lock using raw bytes)`)) {
+        await enrollSwipedCard();
+      }
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  async function enrollSwipedCard() {
+    const lock = selectedLock();
+    if (!lock) { showToast('Select a lock first', 'warn'); return; }
+    try {
+      showToast(`Enrolling swiped card on ${lock.deviceName || lock.linkId}...`, 'info', 5000);
+      const result = await api(`/api/access/enroll-swipe/${encodeURIComponent(lock.linkId)}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          gateway_sn: lock.sn,
+          name: 'Swiped Card Enrollment',
+        }),
+      });
+      if (result.ok) {
+        showToast(`Card enrolled! usrID=${result.enrolled.usrID}, ${result.enrolled.cardBitCount}-bit. DB push started. Swipe again to test!`, 'success', 8000);
+        openJsonModal('Enroll Swipe Result — ' + (lock.deviceName || lock.linkId), result);
+      } else {
+        showToast('Enrollment failed: ' + (result.error || JSON.stringify(result)), 'error');
+      }
+      renderStatus();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
   window.accessUI = {
     init: refreshState,
     switchView,
@@ -1412,10 +1650,20 @@
       Promise.all([refreshPreview(), refreshLockSettings()]).then(renderAll);
     },
     refreshLockSettings,
+    refreshStatus,
+    pullDatabase,
+    clearDatabase,
+    learnCardFromSwipe,
+    enrollSwipedCard,
+    openJsonModal,
+    viewPreviewPayload,
+    viewTransferStatus,
+    viewStatusDetail,
     saveLockSettings,
     setLockSetting: setBooleanLockSetting,
     setGeProxFormat,
     openUserModal,
+    addUserFromSwipe,
     openScheduleModal,
     openFormatModal,
     closeModal,
@@ -1448,7 +1696,6 @@
         showToast(err.message, 'error');
       }
     },
-    renderRecentSwipes,
     renderLocks,
     renderAll,
   };
@@ -1456,4 +1703,5 @@
   // Script loads after DOM is ready (at end of body), so call immediately
   bindEvents();
   ensureSelection();
+  renderAll();
 })();

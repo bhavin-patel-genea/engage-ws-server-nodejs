@@ -1,9 +1,16 @@
 'use strict';
 
+const GENERATED_CODES = require('./generatedAuditCodes.json');
+
 /**
  * ENGAGE audit event code lookup table.
  *
  * Source: ENGAGE - Audits - 0.22.xlsm (DbmAuditEvents + DbmAuditData List)
+ *
+ * This file keeps curated/manual classifications for important events.
+ * Any audit code not listed below falls back to workbook-generated titles
+ * from src/generatedAuditCodes.json so the UI shows a readable description
+ * instead of a raw "Event 0x...." placeholder.
  *
  * result values:
  *   'granted'  — access was permitted
@@ -180,12 +187,52 @@ function _parse(eventType) {
  */
 function lookupEvent(eventType) {
   const { code, data } = _parse(eventType);
-  const entry = CODES[code] || {
-    category: 'System',
-    title:    `Event 0x${code.toString(16).toUpperCase().padStart(4, '0')}`,
-    result:   'info',
+  const codeKey = code.toString(16).toUpperCase().padStart(4, '0');
+  const generated = GENERATED_CODES[`0x${codeKey}`] || GENERATED_CODES[`0X${codeKey}`];
+  const manual = CODES[code] || {};
+  const entry = {
+    category: generated?.category || manual.category || 'System',
+    title: generated?.title || manual.title || `Event 0x${codeKey}`,
+    result: manual.result || 'info',
   };
   return { ...entry, data };
+}
+
+/**
+ * Return workbook-style mapping fields derived from ENGAGE - Audits - 0.22.xlsm.
+ *
+ * This exposes the same conceptual columns users see in the Allegion workbook:
+ * Caption, Description, Audit/Alert, Event, Data, and Data Description.
+ *
+ * @param {number|string} eventType
+ * @returns {{
+ *   matched: boolean,
+ *   caption: string,
+ *   description: string,
+ *   auditAlert: string,
+ *   eventHex: string,
+ *   dataHex: string,
+ *   dataValue: number,
+ *   dataDescription: string,
+ *   sourceCategory: string,
+ * }}
+ */
+function lookupWorkbookRow(eventType) {
+  const { code, data } = _parse(eventType);
+  const codeKey = code.toString(16).toUpperCase().padStart(4, '0');
+  const generated = GENERATED_CODES[`0x${codeKey}`] || GENERATED_CODES[`0X${codeKey}`] || null;
+
+  return {
+    matched: !!generated,
+    caption: generated?.caption || '',
+    description: generated?.title || '',
+    auditAlert: generated?.auditAlert || '',
+    eventHex: `0x${codeKey}`,
+    dataHex: `0x${data.toString(16).toUpperCase().padStart(4, '0')}`,
+    dataValue: data,
+    dataDescription: generated?.dataDescription || '',
+    sourceCategory: generated?.sourceCategory || '',
+  };
 }
 
 /**
@@ -214,8 +261,143 @@ function buildReason(eventType, eventBody) {
     const level = body.batteryLevel ?? body.level ?? body.voltage;
     return level !== undefined ? String(level) : '';
   }
+  // 0x1300 — Credential Not In Database: audit data = card bit count
+  if (code === 0x1300 && data > 0) return `${data}-bit card presented`;
 
   return '';
 }
 
-module.exports = { lookupEvent, buildReason };
+/**
+ * Extract the card bit count from a 0x1300 (Credential Not In Database) event.
+ * The audit data field encodes the bit count of the presented card.
+ * @param {number|string} eventType
+ * @returns {number|null}
+ */
+function extractCardBitCount(eventType) {
+  const { code, data } = _parse(eventType);
+  if (code === 0x1300 && data > 0) return data;
+  return null;
+}
+
+/**
+ * Extract RAW card bytes from 0x1300-series audit events.
+ *
+ * Per Allegion "Examining Card Data" presentation (slide 6-7):
+ * The lock sends raw card data in REVERSE byte order (LSB first) across
+ * sequential 0x1301-0x1304 events. Each event's 16-bit data field contains
+ * 2 bytes of card data.
+ *
+ * Example for a 37-bit card (from training):
+ *   "event": "13000025"   → bit count = 0x25 = 37
+ *   "event": "13010628"   → trailing 2 bytes (LSB)
+ *   "event": "13025e31"   → middle 2 bytes
+ *   "event": "13030081"   → leading 2 bytes (MSB, left-padded with 0x00)
+ *
+ * Reconstruction: reverse event order → 0081 + 5e31 + 0628 → 0x00815E310628
+ * Strip leading padding → 0x815E310628
+ * This IS the raw card data left-shifted to byte boundary (the clear PrimeCR data bytes).
+ *
+ * @param {string[]} auditCodes  Array of raw event type strings
+ * @returns {{ cardBitCount: number|null, rawCardHex: string|null, clearPrimeCrHex: string|null, auditDataChunks: object }}
+ */
+function extractRawCardBytesFromAuditCodes(auditCodes) {
+  let cardBitCount = null;
+  const dataBySeq = {}; // seq (1-4) → 16-bit data value
+
+  for (const code of (auditCodes || [])) {
+    const parsed = _parse(code);
+    if (parsed.code === 0x1300) {
+      cardBitCount = parsed.data;
+    }
+    if (parsed.code >= 0x1301 && parsed.code <= 0x1304) {
+      const seq = parsed.code - 0x1300; // 1, 2, 3, or 4
+      dataBySeq[seq] = parsed.data;
+    }
+  }
+
+  if (!cardBitCount || Object.keys(dataBySeq).length === 0) {
+    return { cardBitCount, rawCardHex: null, clearPrimeCrHex: null, auditDataChunks: dataBySeq };
+  }
+
+  // Reconstruct bytes: highest seq = leading (MSB), lowest seq = trailing (LSB)
+  const maxSeq = Math.max(...Object.keys(dataBySeq).map(Number));
+  const allBytes = [];
+  for (let seq = maxSeq; seq >= 1; seq--) {
+    const val = dataBySeq[seq] || 0;
+    allBytes.push((val >> 8) & 0xFF); // high byte of 16-bit data
+    allBytes.push(val & 0xFF);        // low byte of 16-bit data
+  }
+
+  // The events pack to nearest 2-byte boundary with leading zero padding.
+  // Actual data bytes = ceil(bitCount / 8). Strip any leading zero padding.
+  const actualDataBytes = Math.ceil(cardBitCount / 8);
+  const leadingPadding = allBytes.length - actualDataBytes;
+  const dataBytes = leadingPadding > 0 ? allBytes.slice(leadingPadding) : allBytes;
+
+  // Build clear PrimeCR: data bytes + pad with 0xFF to 16 bytes
+  const clearBuf = Buffer.alloc(16, 0xFF);
+  Buffer.from(dataBytes).copy(clearBuf, 0);
+
+  return {
+    cardBitCount,
+    rawCardHex: Buffer.from(dataBytes).toString('hex'),
+    clearPrimeCrHex: clearBuf.toString('hex'),
+    auditDataChunks: dataBySeq,
+  };
+}
+
+/**
+ * Extract card data embedded in the 0x1300-series audit event codes.
+ * Uses the raw byte reconstruction to decode FC and card number for known formats.
+ *
+ * @param {string[]} auditCodes  Array of raw event type strings
+ * @returns {{ cardNumber: string|null, facilityCode: string|null, cardBitCount: number|null, rawCardHex: string|null, clearPrimeCrHex: string|null }}
+ */
+function extractCardDataFromAuditCodes(auditCodes) {
+  const raw = extractRawCardBytesFromAuditCodes(auditCodes);
+
+  let cardNumber = null;
+  let facilityCode = null;
+
+  if (raw.rawCardHex && raw.cardBitCount) {
+    // Decode FC and card number from raw bits for common formats
+    const buf = Buffer.from(raw.rawCardHex, 'hex');
+    const bits = [];
+    for (let i = 0; i < raw.cardBitCount; i++) {
+      const byteIdx = Math.floor(i / 8);
+      const bitIdx = 7 - (i % 8);
+      bits.push((buf[byteIdx] >> bitIdx) & 1);
+    }
+
+    if (raw.cardBitCount === 26) {
+      // H10301: [EP 1][FC 8][Card 16][OP 1]
+      facilityCode = 0;
+      for (let i = 1; i <= 8; i++) facilityCode = (facilityCode << 1) | bits[i];
+      cardNumber = 0;
+      for (let i = 9; i <= 24; i++) cardNumber = (cardNumber << 1) | bits[i];
+    } else if (raw.cardBitCount === 37) {
+      // H10304: [EP 1][FC 16][Card 19][OP 1]
+      facilityCode = 0;
+      for (let i = 1; i <= 16; i++) facilityCode = (facilityCode << 1) | bits[i];
+      cardNumber = 0;
+      for (let i = 17; i <= 35; i++) cardNumber = (cardNumber << 1) | bits[i];
+    }
+  }
+
+  return {
+    cardNumber: cardNumber !== null ? String(cardNumber) : null,
+    facilityCode: facilityCode !== null ? String(facilityCode) : null,
+    cardBitCount: raw.cardBitCount,
+    rawCardHex: raw.rawCardHex,
+    clearPrimeCrHex: raw.clearPrimeCrHex,
+  };
+}
+
+module.exports = {
+  lookupEvent,
+  lookupWorkbookRow,
+  buildReason,
+  extractCardBitCount,
+  extractCardDataFromAuditCodes,
+  extractRawCardBytesFromAuditCodes,
+};

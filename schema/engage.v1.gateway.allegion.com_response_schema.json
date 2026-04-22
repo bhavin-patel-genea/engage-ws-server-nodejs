@@ -18,7 +18,7 @@
                 },
                 "messageBody": {
                     "description": "The additional body information associated with the response",
-                    "type": "string"
+                    "type": ["string", "object"]
                 }
             },
             "required": [

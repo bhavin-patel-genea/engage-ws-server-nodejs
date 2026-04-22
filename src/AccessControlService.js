@@ -32,7 +32,7 @@ function uniqueSortedDays(days) {
 function isAlwaysOn(schedule) {
   return schedule.strtHr === 0 &&
     schedule.strtMn === 0 &&
-    schedule.lngth === 1439 &&
+    schedule.lngth === 1440 &&
     schedule.days.length === 7;
 }
 
@@ -146,7 +146,7 @@ class AccessControlService {
     const lngth = toInt(input.lngth, 'lngth');
     if (strtHr < 0 || strtHr > 23) throw new Error('strtHr must be between 0 and 23');
     if (strtMn < 0 || strtMn > 59) throw new Error('strtMn must be between 0 and 59');
-    if (lngth < 1 || lngth > 1439) throw new Error('lngth must be between 1 and 1439');
+    if (lngth < 1 || lngth > 1440) throw new Error('lngth must be between 1 and 1440');
 
     return this.store.mutate((state) => {
       let schedule = state.schedules.find(s => s.id === input.id);
@@ -245,12 +245,11 @@ class AccessControlService {
   buildPreview(linkId) {
     const snapshot = this.store.getSnapshot();
     const assignedUsers = snapshot.users.filter(u => Array.isArray(u.lockIds) && u.lockIds.includes(linkId));
+
+    // Only include schedules actually referenced by users (+ the required default).
+    // Do NOT include lock-assigned-but-unreferenced schedules — they waste space
+    // and extra/duplicate schedules may confuse lock firmware.
     const selectedScheduleIds = new Set([DEFAULT_SCHEDULE_ID]);
-
-    snapshot.schedules
-      .filter(s => Array.isArray(s.lockIds) && s.lockIds.includes(linkId))
-      .forEach(s => selectedScheduleIds.add(s.id));
-
     assignedUsers.forEach(user => {
       const scheduleIds = Array.isArray(user.scheduleIds) && user.scheduleIds.length > 0
         ? user.scheduleIds
@@ -277,7 +276,7 @@ class AccessControlService {
         issueCode: user.issueCode,
       });
 
-      const crSch = (Array.isArray(user.scheduleIds) && user.scheduleIds.length > 0
+      const crSchArr = (Array.isArray(user.scheduleIds) && user.scheduleIds.length > 0
         ? user.scheduleIds
         : [DEFAULT_SCHEDULE_ID]
       )
@@ -285,20 +284,44 @@ class AccessControlService {
         .map(id => scheduleIndexById.get(id))
         .sort((a, b) => a - b);
 
+      // ENGAGE spec minimum example (page 48) sends crSch as integer for single schedule.
+      // Table 2 says "Array of Unsigned Int/2s" but some LE firmware may only accept integer
+      // for single-schedule assignments. Use integer when single, array when multiple.
+      const crSch = crSchArr.length === 1 ? crSchArr[0] : crSchArr;
+
       return {
         usrID: user.usrID,
         adaEn: Number(user.adaEn || 0),
-        actDtTm: String(user.actDtTm || DEFAULT_ACT_DT_TM),
-        expDtTm: String(user.expDtTm || DEFAULT_EXP_DT_TM),
         fnctn: user.fnctn || 'norm',
         crSch,
+        actDtTm: String(user.actDtTm || DEFAULT_ACT_DT_TM),
+        expDtTm: String(user.expDtTm || DEFAULT_EXP_DT_TM),
         primeCr: prime.encryptedHex,
         prCrTyp: 'card',
+        scndCrTyp: 'null',
         _clearPrimeCr: prime.clearHex,
       };
     }).sort((a, b) => a._clearPrimeCr.localeCompare(b._clearPrimeCr));
 
-    const add = addRecords.map(({ _clearPrimeCr, ...record }) => record);
+    // ENGAGE spec: "duplicate records are treated as unsorted" — remove duplicates
+    // Keep the first occurrence of each unique PrimeCR (sorted by clear value)
+    const seenPrimeCr = new Set();
+    const dedupedRecords = [];
+    const skippedDuplicates = [];
+    for (const rec of addRecords) {
+      if (seenPrimeCr.has(rec._clearPrimeCr)) {
+        skippedDuplicates.push({ usrID: rec.usrID, primeCr: rec.primeCr });
+        continue;
+      }
+      seenPrimeCr.add(rec._clearPrimeCr);
+      dedupedRecords.push(rec);
+    }
+    if (skippedDuplicates.length > 0) {
+      console.warn(`[AccessControl] Removed ${skippedDuplicates.length} duplicate PrimeCR(s):`,
+        skippedDuplicates.map(d => `usrID=${d.usrID}`).join(', '));
+    }
+
+    const add = dedupedRecords.map(({ _clearPrimeCr, ...record }) => record);
     const wireSchedules = schedules.map(schedule => ({
       days: schedule.days,
       strtHr: schedule.strtHr,
@@ -320,6 +343,7 @@ class AccessControlService {
           holidays: [],
           autoUnlock: [],
         },
+        dbDwnLdTm: '',
         nxtDbVerTS: this._nextDbVersion(),
       },
       summary: {
@@ -327,6 +351,11 @@ class AccessControlService {
         deleteAll: 1,
         userCount: add.length,
         scheduleCount: wireSchedules.length,
+        duplicatesRemoved: skippedDuplicates.length,
+        ...(skippedDuplicates.length > 0 ? {
+          duplicateWarning: `${skippedDuplicates.length} user(s) removed — duplicate card credential (same card+FC+format). ENGAGE locks treat duplicates as unsorted and reject lookups.`,
+          skippedUsrIDs: skippedDuplicates.map(d => d.usrID),
+        } : {}),
       },
       scheduleMappings: schedules.map((schedule, idx) => ({
         wireIndex: idx + 1,
@@ -397,7 +426,10 @@ class AccessControlService {
           }
           if (this._cachedSiteKey) {
             const siteKey = this._cachedSiteKey;
-            const allFormats = [...defaultCardFormats, ...(snapshot.customCardFormats || [])];
+            const allFormats = [
+              ...defaultCardFormats.map(f => ({ ...f, source: 'builtin', id: f.value })),
+              ...(snapshot.customCardFormats || []).map(f => ({ ...f, source: 'custom' })),
+            ];
             decodedCredential = decryptCredentialReport(credHex, siteKey, allFormats);
             if (decodedCredential?.cardNumber) {
               presentedCard = decodedCredential.cardNumber;

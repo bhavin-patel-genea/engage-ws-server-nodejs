@@ -9,8 +9,6 @@ const path = require('path');
 const TIMESTAMP_TOLERANCE_SECONDS = 300;
 
 const INDEX_REST_PATH = '/engage/index';
-const NEW_CRED_REST_PATH = '/engage/newCredentials';
-const WSS_REST_PATH = '/engage_wss';
 
 /**
  * Register all ENGAGE protocol HTTP routes onto the given Express app.
@@ -41,8 +39,9 @@ function createRoutes(app, server) {
   //   and returns it as plain text. The gateway uses this password for the
   //   subsequent WebSocket upgrade (Basic Auth: SN:password).
   //
-  app.post(NEW_CRED_REST_PATH, (req, res) => {
+  app.post('/engage/newCredentials', (req, res) => {
     console.log(`Credential request from ${req.ip}`);
+
 
     if (!fs.existsSync(server.siteKeyFile)) {
       return res.status(501).send('No site key configured');
@@ -65,6 +64,8 @@ function createRoutes(app, server) {
     if (!rawBody || rawBody.length < 99) {
       return res.status(400).send('Request body too short (expected ≥ 99 bytes)');
     }
+    console.log(`/engage/newCredentials`);
+    console.log(JSON.stringify(req.body));
 
     let decoded;
     try {
@@ -308,4 +309,8 @@ function _loadSiteKey(siteKeyFile) {
   }
 }
 
-module.exports = { createRoutes, createCaRoutes, INDEX_REST_PATH, NEW_CRED_REST_PATH, WSS_REST_PATH };
+module.exports = {
+  createRoutes,
+  createCaRoutes,
+  INDEX_REST_PATH,
+};

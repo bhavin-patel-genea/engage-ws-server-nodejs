@@ -92,6 +92,41 @@ class AuditStore {
   }
 
   /**
+   * Delete stored entries matching the given predicate.
+   *
+   * @param {(entry: object) => boolean} predicate
+   * @returns {number} Number of removed entries
+   */
+  deleteWhere(predicate) {
+    const before = this.entries.length;
+    this.entries = this.entries.filter(entry => !predicate(entry));
+    const removed = before - this.entries.length;
+    if (removed > 0) {
+      this._dirty = true;
+    }
+    return removed;
+  }
+
+  /**
+   * Delete all stored entries for a specific lock linkId.
+   *
+   * @param {string} linkId
+   * @returns {number}
+   */
+  deleteByLinkId(linkId) {
+    return this.deleteWhere(entry => String(entry.linkId || '') === String(linkId));
+  }
+
+  /**
+   * Delete all stored entries.
+   *
+   * @returns {number}
+   */
+  clearAll() {
+    return this.deleteWhere(() => true);
+  }
+
+  /**
    * Get total count of stored entries.
    * @returns {number}
    */

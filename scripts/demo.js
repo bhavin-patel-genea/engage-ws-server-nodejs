@@ -47,13 +47,16 @@
  */
 
 const path = require('path');
+const crypto = require('crypto');
 process.chdir(path.join(__dirname, '..'));
 
 const express = require('express');
 const EngageWsServer = require('../src/EngageWsServer');
 const { EngageRequest } = require('../src/EngageWsProtocol');
-const { lookupEvent, buildReason } = require('../src/eventCodes');
+const { lookupEvent, lookupWorkbookRow, buildReason, extractCardBitCount, extractCardDataFromAuditCodes, extractRawCardBytesFromAuditCodes } = require('../src/eventCodes');
+const { encryptClearPrimeCr } = require('../src/PrimeCredential');
 const AuditStore = require('../src/AuditStore');
+const EventTraceLogger = require('../src/EventTraceLogger');
 const ConnectionTracker = require('../src/ConnectionTracker');
 const { AccessStateStore } = require('../src/AccessStateStore');
 const AccessControlService = require('../src/AccessControlService');
@@ -64,6 +67,7 @@ const log = require('../src/logger');
 const gateways = new Map(); // sn → { sn, connectedAt }
 const devices = new Map(); // sn → [{ linkId, deviceName, modelType, lockState }]
 const auditStore = new AuditStore('./data/audits.json', 48);     // 48-hour retention
+const eventTraceLogger = new EventTraceLogger('./data/egw-event-trace.log');
 const connectionTracker = new ConnectionTracker('./data/connections.json');
 const accessStateStore = new AccessStateStore('./data/access-state.json');
 const accessService = new AccessControlService(accessStateStore, { siteKeyFile: './config/sitekey' });
@@ -84,6 +88,15 @@ const LOCK_SETTING_BOOLEAN_KEYS = [
 ];
 const databasePushStates = new Map(); // linkId → status object
 const databasePollers = new Map(); // linkId → interval handle
+const gatewayApiTraffic = [];
+const gatewayNetworkStats = new Map(); // sn -> aggregate diagnostics
+const gatewayPendingCredentials = new Map(); // sn -> pending basic-auth session
+const gatewayCommittedCredentials = new Map(); // username -> committed basic-auth session
+
+const DEFAULT_GATEWAY_API_USER = process.env.ENGAGE_GATEWAY_DEFAULT_USER || 'EngageGatewayDefaultUser';
+const DEFAULT_GATEWAY_API_PASSWORD = process.env.ENGAGE_GATEWAY_DEFAULT_PASSWORD || 'EngageGatewayDefaultPassword';
+const GATEWAY_API_LOG_LIMIT = 250;
+const GATEWAY_API_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 
 // ── SSE broadcast ──────────────────────────────────────────────────────────────
 
@@ -141,6 +154,328 @@ function parseJsonSafe(raw) {
   }
 }
 
+function formatGatewayTimestamp(date = new Date()) {
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+}
+
+function recordGatewayTraffic(entry) {
+  gatewayApiTraffic.unshift({
+    timestamp: new Date().toISOString(),
+    ...entry,
+  });
+  if (gatewayApiTraffic.length > GATEWAY_API_LOG_LIMIT) {
+    gatewayApiTraffic.length = GATEWAY_API_LOG_LIMIT;
+  }
+}
+
+function clipForLog(value, maxLen = 1200) {
+  if (value === null || value === undefined) return '';
+  const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+  return text.length > maxLen ? `${text.slice(0, maxLen)}\n... [truncated ${text.length - maxLen} chars]` : text;
+}
+
+function logGatewayRequestStage(stage, details = {}) {
+  const lines = [
+    '',
+    `=== EGW Request ${stage} ===`,
+    `Gateway SN   : ${details.sn || 'unknown'}`,
+    `Category     : ${details.category || 'gateway-request'}`,
+    `Source       : ${details.source || 'server'}`,
+    `Method/Path  : ${(details.method || '').toUpperCase()} ${details.path || ''}`.trim(),
+  ];
+
+  if (details.requestId !== undefined) lines.push(`Request ID    : ${details.requestId}`);
+  if (details.responseStatus !== undefined) lines.push(`HTTP Status   : ${details.responseStatus}`);
+  if (details.durationMs !== undefined) lines.push(`Duration      : ${details.durationMs} ms`);
+  if (details.notes) lines.push(`Notes         : ${details.notes}`);
+  if (details.requestBody !== undefined && details.requestBody !== '') {
+    lines.push('Request Body  :');
+    lines.push(clipForLog(details.requestBody));
+  }
+  if (details.responseBody !== undefined && details.responseBody !== null && details.responseBody !== '') {
+    lines.push('Response Body :');
+    lines.push(clipForLog(details.responseBody));
+  }
+
+  console.log(lines.join('\n'));
+}
+
+function logGatewayEventProcessing(stage, details = {}) {
+  const lines = [
+    '',
+    `=== EGW Event ${stage} ===`,
+    `Gateway SN   : ${details.sn || 'unknown'}`,
+    `Source       : ${details.source || 'unknown'}`,
+    `Device       : ${details.deviceId || '—'}`,
+  ];
+
+  if (details.eventId !== undefined) lines.push(`Event ID      : ${details.eventId}`);
+  if (details.rawEventType !== undefined) lines.push(`Raw eventType : ${details.rawEventType}`);
+  if (details.auditCode !== undefined) lines.push(`Parsed Code   : ${details.auditCode}`);
+  if (details.auditCount !== undefined) lines.push(`Audit Count   : ${details.auditCount}`);
+  if (details.category) lines.push(`Mapped Cat.   : ${details.category}`);
+  if (details.title) lines.push(`Mapped Title  : ${details.title}`);
+  if (details.reason) lines.push(`Reason        : ${details.reason}`);
+  if (details.mappingStatus) lines.push(`Workbook Map  : ${details.mappingStatus}`);
+  if (details.caption) lines.push(`Workbook Cap. : ${details.caption}`);
+  if (details.eventHex) lines.push(`Workbook Event: ${details.eventHex}`);
+  if (details.dataHex) lines.push(`Workbook Data : ${details.dataHex}`);
+  if (details.dataDescription) lines.push(`Data Meaning  : ${details.dataDescription}`);
+  if (details.explanation) lines.push(`Processing    : ${details.explanation}`);
+  if (details.rawPayload !== undefined && details.rawPayload !== '') {
+    lines.push('Raw Payload   :');
+    lines.push(clipForLog(details.rawPayload));
+  }
+
+  console.log(lines.join('\n'));
+}
+
+function traceGatewayEvent(stage, details = {}) {
+  eventTraceLogger.trace(stage, details);
+}
+
+function normalizeStatsPath(reqPath = '') {
+  return String(reqPath || '')
+    .replace(/\/edgeDevices\/[^/]+\/database/g, '/edgeDevices/{linkId}/database')
+    .replace(/\/edgeDevices\/[^/]+\/dbDownloadStatus/g, '/edgeDevices/{linkId}/dbDownloadStatus')
+    .replace(/\/edgeDevices\/[^/]+\/config/g, '/edgeDevices/{linkId}/config')
+    .replace(/\/edgeDevices\/[^/]+\/params/g, '/edgeDevices/{linkId}/params')
+    .replace(/\/edgeDevices\/[^/]+\/audits/g, '/edgeDevices/{linkId}/audits')
+    .replace(/\/edgeDevices\/[^/]+\/lockControl/g, '/edgeDevices/{linkId}/lockControl')
+    .replace(/\/edgeDevices\/[^/]+\/lockStatus/g, '/edgeDevices/{linkId}/lockStatus')
+    .replace(/\/edgeDevices\/[^/]+\/time/g, '/edgeDevices/{linkId}/time')
+    .replace(/\/edgeDevices\/[^/]+$/g, '/edgeDevices/{linkId}');
+}
+
+function extractLinkIdFromPath(reqPath = '') {
+  const match = String(reqPath || '').match(/^\/edgeDevices\/([^/]+)/);
+  if (!match) return null;
+  const linkId = match[1];
+  return ['linkList', 'lockControl', 'lockStatus', 'audits'].includes(linkId) ? null : linkId;
+}
+
+function updateGatewayNetworkStats(sn, entry) {
+  if (!sn) return;
+
+  const current = gatewayNetworkStats.get(sn) || {
+    sn,
+    firstSeenAt: new Date().toISOString(),
+    updatedAt: null,
+    totals: {
+      requests: 0,
+      successes: 0,
+      failures: 0,
+      timeouts: 0,
+    },
+    byPath: {},
+    byLinkId: {},
+  };
+
+  current.updatedAt = new Date().toISOString();
+  current.totals.requests += 1;
+  if (entry.responseStatus === 'timeout') current.totals.timeouts += 1;
+  else if (String(entry.responseStatus) === '200') current.totals.successes += 1;
+  else current.totals.failures += 1;
+
+  const normalizedPath = normalizeStatsPath(entry.path);
+  const pathStats = current.byPath[normalizedPath] || {
+    path: normalizedPath,
+    requests: 0,
+    successes: 0,
+    failures: 0,
+    timeouts: 0,
+    lastMethod: null,
+    lastResponseStatus: null,
+    lastDurationMs: null,
+    lastSeenAt: null,
+  };
+  pathStats.requests += 1;
+  if (entry.responseStatus === 'timeout') pathStats.timeouts += 1;
+  else if (String(entry.responseStatus) === '200') pathStats.successes += 1;
+  else pathStats.failures += 1;
+  pathStats.lastMethod = entry.method;
+  pathStats.lastResponseStatus = entry.responseStatus;
+  pathStats.lastDurationMs = entry.durationMs;
+  pathStats.lastSeenAt = current.updatedAt;
+  current.byPath[normalizedPath] = pathStats;
+
+  const linkId = extractLinkIdFromPath(entry.path);
+  if (linkId) {
+    const linkStats = current.byLinkId[linkId] || {
+      linkId,
+      requests: 0,
+      successes: 0,
+      failures: 0,
+      timeouts: 0,
+      lastPath: null,
+      lastResponseStatus: null,
+      lastSeenAt: null,
+    };
+    linkStats.requests += 1;
+    if (entry.responseStatus === 'timeout') linkStats.timeouts += 1;
+    else if (String(entry.responseStatus) === '200') linkStats.successes += 1;
+    else linkStats.failures += 1;
+    linkStats.lastPath = entry.path;
+    linkStats.lastResponseStatus = entry.responseStatus;
+    linkStats.lastSeenAt = current.updatedAt;
+    current.byLinkId[linkId] = linkStats;
+  }
+
+  gatewayNetworkStats.set(sn, current);
+}
+
+function parseBasicAuth(req) {
+  const authHeader = req.headers.authorization || '';
+  if (!authHeader.startsWith('Basic ')) return null;
+
+  try {
+    const decoded = Buffer.from(authHeader.slice(6), 'base64').toString('utf8');
+    const separator = decoded.indexOf(':');
+    if (separator < 0) return null;
+    return {
+      username: decoded.slice(0, separator),
+      password: decoded.slice(separator + 1),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function defaultGatewayCredentialsMatch(auth) {
+  return auth?.username === DEFAULT_GATEWAY_API_USER && auth?.password === DEFAULT_GATEWAY_API_PASSWORD;
+}
+
+function resolveGatewaySn(req, preferredSn = null) {
+  const directCandidates = [
+    preferredSn,
+    req.headers['x-gateway-sn'],
+    req.query?.gateway_sn,
+    req.body?.gateway_sn,
+    req.gatewaySession?.targetSn,
+  ].filter(Boolean).map(value => String(value).trim().toUpperCase());
+
+  for (const sn of directCandidates) {
+    if (gateways.has(sn)) return sn;
+  }
+
+  const connected = Array.from(gateways.keys());
+  if (connected.length === 1) return connected[0];
+  return null;
+}
+
+function requireDefaultGatewayAuth(req, res, next) {
+  const auth = parseBasicAuth(req);
+  if (!defaultGatewayCredentialsMatch(auth)) {
+    res.set('WWW-Authenticate', 'Basic realm="ENGAGE Gateway Setup"');
+    return res.status(401).json({ error: 'Default gateway credentials are required' });
+  }
+  req.gatewayAuth = auth;
+  next();
+}
+
+function requireGatewayApiSession(req, res, next) {
+  const auth = parseBasicAuth(req);
+  if (!auth) {
+    res.set('WWW-Authenticate', 'Basic realm="ENGAGE Gateway API"');
+    return res.status(401).json({ error: 'Basic authentication is required' });
+  }
+
+  const session = gatewayCommittedCredentials.get(auth.username);
+  if (!session || session.password !== auth.password) {
+    res.set('WWW-Authenticate', 'Basic realm="ENGAGE Gateway API"');
+    return res.status(401).json({ error: 'Invalid gateway API credentials. Initialize them with GET/PUT /gateway/newCredentials first.' });
+  }
+
+  if ((Date.now() - session.committedAtMs) > GATEWAY_API_SESSION_TTL_MS) {
+    gatewayCommittedCredentials.delete(auth.username);
+    res.set('WWW-Authenticate', 'Basic realm="ENGAGE Gateway API"');
+    return res.status(401).json({ error: 'Gateway API credentials expired. Re-run GET/PUT /gateway/newCredentials.' });
+  }
+
+  req.gatewayAuth = auth;
+  req.gatewaySession = session;
+  next();
+}
+
+function getGatewayDeviceSnapshot(sn) {
+  const linkedDevices = devices.get(sn) || [];
+  const connection = server.getConnections().get(sn);
+  return {
+    gatewayDeviceInfo: {
+      serialNumber: sn,
+      connectionName: connection?.connectionName || null,
+      connectedAt: gateways.get(sn)?.connectedAt || null,
+      lastAuthAt: gateways.get(sn)?.lastAuthAt || null,
+      protocol: connection?.connection?.engageProtocol || null,
+      linkedDeviceCount: linkedDevices.length,
+      linkedDevices,
+    },
+  };
+}
+
+function getGatewayTimeSnapshot(sn) {
+  return {
+    gatewayTime: {
+      serialNumber: sn,
+      rtcTime: formatGatewayTimestamp(),
+      source: 'api-playground-host',
+      linkedDeviceCount: (devices.get(sn) || []).length,
+    },
+  };
+}
+
+function getGatewayScanSnapshot(sn) {
+  return {
+    scanList: (devices.get(sn) || []).map(device => ({
+      linkId: device.linkId,
+      deviceName: device.deviceName,
+      modelType: device.modelType,
+      discovered: true,
+      source: 'linked-device-cache',
+    })),
+  };
+}
+
+function getGatewayNetworkStatisticsSnapshot(sn) {
+  const stats = gatewayNetworkStats.get(sn) || {
+    sn,
+    firstSeenAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    totals: { requests: 0, successes: 0, failures: 0, timeouts: 0 },
+    byPath: {},
+    byLinkId: {},
+  };
+
+  return {
+    gatewayNetworkStatistics: {
+      sn,
+      totals: stats.totals,
+      byPath: Object.values(stats.byPath),
+      byLinkId: Object.values(stats.byLinkId),
+      firstSeenAt: stats.firstSeenAt,
+      updatedAt: stats.updatedAt,
+    },
+  };
+}
+
+function getGatewayEventLogSnapshot(sn, limit = 100) {
+  const items = gatewayApiTraffic
+    .filter(entry => !sn || entry.sn === sn)
+    .slice(0, limit);
+
+  return {
+    gatewayEventLog: items,
+  };
+}
+
+function filterAuditEntries(linkId = null, sn = null, limit = 200) {
+  return auditStore.getAll(1000)
+    .filter(entry => !sn || entry.sn === sn)
+    .filter(entry => !linkId || String(entry.linkId || '') === String(linkId))
+    .slice(0, limit);
+}
+
 function normalizeTfFlag(value) {
   if (value === true || value === false) return value;
   if (value === 1 || value === 0) return value === 1;
@@ -180,6 +515,10 @@ function extractLockSettingsSource(parsed) {
   pushCandidate(parsed?.data);
   pushCandidate(parsed?.data?.params);
   pushCandidate(parsed?.data?.config);
+  // edgeDevice nested structure: settings live inside config.lockPrmtrs and config.rdrPrmtrs
+  pushCandidate(parsed?.edgeDevice?.config);
+  pushCandidate(parsed?.edgeDevice?.config?.lockPrmtrs);
+  pushCandidate(parsed?.edgeDevice?.config?.rdrPrmtrs);
 
   return Object.assign({}, ...candidates);
 }
@@ -431,12 +770,89 @@ async function discoverDevices(sn) {
 
 // ── Request helper ─────────────────────────────────────────────────────────────
 
-async function request(sn, method, reqPath, body, timeoutSec = 30) {
+async function request(sn, method, reqPath, body, timeoutSec = 30, meta = {}) {
+  const startedAt = Date.now();
   const req = new EngageRequest(server.getNewRequestId(), method, reqPath, body);
-  if (server.sendMsg(sn, req) !== 0) return null;
+  const parsedRequestBody = parseJsonSafe(body) ?? body ?? '';
+  logGatewayRequestStage('OUTBOUND', {
+    sn,
+    category: meta.category || 'gateway-request',
+    source: meta.source || 'server',
+    method,
+    path: reqPath,
+    requestId: req.requestId,
+    requestBody: parsedRequestBody,
+    notes: meta.notes || null,
+  });
+  if (server.sendMsg(sn, req) !== 0) {
+    recordGatewayTraffic({
+      sn,
+      category: meta.category || 'gateway-request',
+      method,
+      path: reqPath,
+      responseStatus: 'offline',
+      durationMs: 0,
+      source: meta.source || 'server',
+      requestBody: parsedRequestBody,
+      notes: meta.notes || null,
+    });
+    updateGatewayNetworkStats(sn, {
+      method,
+      path: reqPath,
+      responseStatus: 'offline',
+      durationMs: 0,
+    });
+    logGatewayRequestStage('OFFLINE', {
+      sn,
+      category: meta.category || 'gateway-request',
+      source: meta.source || 'server',
+      method,
+      path: reqPath,
+      requestId: req.requestId,
+      responseStatus: 'offline',
+      durationMs: 0,
+      requestBody: parsedRequestBody,
+      notes: 'Gateway connection was not available when the request was sent.',
+    });
+    return null;
+  }
   // waitForResponse resolves the Promise for exactly this requestId —
   // concurrent requests to the same gateway cannot receive each other's responses.
-  return server.waitForResponse(sn, req.requestId, timeoutSec);
+  const response = await server.waitForResponse(sn, req.requestId, timeoutSec);
+  const durationMs = Date.now() - startedAt;
+  const parsedResponseBody = parseJsonSafe(response?.responseMessageBody) ?? response?.responseMessageBody ?? null;
+  recordGatewayTraffic({
+    sn,
+    category: meta.category || 'gateway-request',
+    method,
+    path: reqPath,
+    responseStatus: response?.responseStatus ?? 'timeout',
+    durationMs,
+    source: meta.source || 'server',
+    requestBody: parsedRequestBody,
+    responseBody: parsedResponseBody,
+    notes: meta.notes || null,
+  });
+  updateGatewayNetworkStats(sn, {
+    method,
+    path: reqPath,
+    responseStatus: response?.responseStatus ?? 'timeout',
+    durationMs,
+  });
+  logGatewayRequestStage(response ? 'INBOUND' : 'TIMEOUT', {
+    sn,
+    category: meta.category || 'gateway-request',
+    source: meta.source || 'server',
+    method,
+    path: reqPath,
+    requestId: req.requestId,
+    responseStatus: response?.responseStatus ?? 'timeout',
+    durationMs,
+    requestBody: parsedRequestBody,
+    responseBody: parsedResponseBody,
+    notes: response ? (meta.notes || null) : `No gateway response within ${timeoutSec}s timeout.`,
+  });
+  return response;
 }
 
 // ── JSON body middleware ───────────────────────────────────────────────────────
@@ -445,6 +861,10 @@ async function request(sn, method, reqPath, body, timeoutSec = 30) {
 // This middleware parses JSON from that Buffer for our API routes.
 function parseJsonBody(req, res, next) {
   if (Buffer.isBuffer(req.body)) {
+    if (req.body.length === 0) {
+      req.body = {};
+      return next();
+    }
     try {
       req.body = JSON.parse(req.body.toString('utf8'));
     } catch {
@@ -460,6 +880,426 @@ const server = new EngageWsServer({
   onConnectionMade: sn => { onGatewayConnected(sn); },
   onConnectionLost: sn => { onGatewayDisconnected(sn); },
 });
+
+// ── Event consolidation ───────────────────────────────────────────────────────
+// A single card swipe generates multiple rapid-fire audit events from the
+// gateway (e.g. 0x0540 + 0x1300 + 0x1301 + 0x1302 all within ~5ms).  We buffer
+// events per device and flush once they stop arriving, producing one consolidated
+// event log entry and one access-swipe-feed entry per physical card presentation.
+
+const EVENT_CONSOLIDATION_MS = 500; // flush after this quiet period
+const eventBuffer = new Map(); // key = “sn:linkId” → { timer, items[] }
+
+// Store last denied card raw data per lock — for “Learn Card from Swipe” feature
+const lastDeniedCard = new Map(); // key = linkId → { cardBitCount, rawCardHex, clearPrimeCrHex, cardNumber, facilityCode, timestamp }
+
+const LOCK_STATE_MAP = {
+  '0f000000': 'passage',
+  '0f010000': 'secure',
+  '0f020000': 'momentaryUnlock',
+};
+
+function auditCodeValue(auditCode) {
+  if (typeof auditCode === 'number') return auditCode;
+  const raw = String(auditCode || '').replace(/^0x/i, '');
+  if (raw.length >= 4) return parseInt(raw.slice(0, 4), 16);
+  return Number.parseInt(raw, 10) || 0;
+}
+
+function isCredentialNarrativeEvent(auditCode) {
+  const code = auditCodeValue(auditCode);
+  return new Set([
+    0x0508,
+    0x0509,
+    0x050A,
+    0x050B,
+    0x050C,
+    0x050D,
+    0x050E,
+    0x0540,
+    0x0541,
+    0x1300,
+  ]).has(code);
+}
+
+/**
+ * Parse a single gateway event into a structured item we can merge later.
+ */
+function parseGatewayEvent(sn, event) {
+  let body = {};
+  try {
+    body = typeof event.eventBody === 'string'
+      ? JSON.parse(event.eventBody)
+      : (event.eventBody || {});
+  } catch { /* ignore */ }
+
+  const container = body.edgeDevice || body.gateway || {};
+  const audits = Array.isArray(container.audits) ? container.audits : [];
+  logGatewayEventProcessing('RAW INPUT', {
+    sn,
+    source: event.eventSource,
+    deviceId: event.eventDeviceId,
+    eventId: event.eventId,
+    rawEventType: event.eventType,
+    auditCount: audits.length,
+    explanation: audits.length > 0
+      ? 'EGW sent an audits[] payload. This project will evaluate each audit entry and derive workbook Event/Data from the audit code.'
+      : 'EGW did not send audits[]. This project will fall back to event.eventType and try to map that value to the workbook.',
+    rawPayload: event.eventBody,
+  });
+  traceGatewayEvent('raw_input', {
+    sn,
+    eventId: event.eventId,
+    eventType: event.eventType,
+    eventSource: event.eventSource,
+    eventDeviceId: event.eventDeviceId,
+    auditCount: audits.length,
+    explanation: audits.length > 0
+      ? 'Used EGW audits[] payload as the source for downstream parsing.'
+      : 'audits[] missing; downstream parsing will fall back to EGW eventType.',
+    rawEventBody: event.eventBody,
+  });
+
+  // Flatten multi-audit messages into individual items
+  const items = [];
+  if (audits.length > 1) {
+    const sourceKey = body.edgeDevice ? 'edgeDevice' : (body.gateway ? 'gateway' : null);
+    audits.forEach(auditItem => {
+      const code = auditItem?.event || event.eventType;
+      const scopedBody = sourceKey
+        ? { ...body, [sourceKey]: { ...container, audits: [auditItem] } }
+        : body;
+      items.push({
+        sn,
+        auditCode: code,
+        linkId: container.linkId || event.eventDeviceId,
+        source: event.eventSource,
+        body: scopedBody,
+        rawBody: typeof event.eventBody === 'string' ? JSON.stringify(scopedBody) : scopedBody,
+        container,
+        mergedAccessBody: { ...body, ...container, ...auditItem },
+        credentialReport: container.credentialReport || null,
+      });
+    });
+  } else {
+    const code = audits.length > 0 ? audits[0].event : event.eventType;
+    items.push({
+      sn,
+      auditCode: code,
+      linkId: container.linkId || event.eventDeviceId,
+      source: event.eventSource,
+      body,
+      rawBody: event.eventBody,
+      container,
+      mergedAccessBody: { ...body, ...container, ...(audits[0] || {}) },
+      credentialReport: container.credentialReport || null,
+    });
+  }
+
+  items.forEach((item, index) => {
+    const workbook = lookupWorkbookRow(item.auditCode);
+    logGatewayEventProcessing(`PARSED ITEM #${index + 1}`, {
+      sn,
+      source: item.source,
+      deviceId: item.linkId,
+      rawEventType: event.eventType,
+      auditCode: item.auditCode,
+      category: lookupEvent(item.auditCode).category,
+      title: lookupEvent(item.auditCode).title,
+      mappingStatus: workbook.matched ? 'Matched ENGAGE - Audits - 0.22.xlsm row' : 'No workbook row match',
+      caption: workbook.caption || '',
+      eventHex: workbook.eventHex,
+      dataHex: workbook.dataHex,
+      dataDescription: workbook.dataDescription || '',
+      explanation: audits.length > 0
+        ? 'Item came from audits[] entry supplied by EGW.'
+        : 'Item came from fallback event.eventType because audits[] was absent.',
+      rawPayload: item.rawBody,
+    });
+    traceGatewayEvent('parsed_item', {
+      sn,
+      itemIndex: index + 1,
+      source: item.source,
+      linkId: item.linkId,
+      rawEventType: event.eventType,
+      auditCode: item.auditCode,
+      workbookMapping: workbook,
+      appLookup: lookupEvent(item.auditCode),
+      explanation: audits.length > 0
+        ? 'Parsed from EGW audits[] entry.'
+        : 'Parsed from fallback event.eventType.',
+      rawPayload: item.rawBody,
+    });
+  });
+
+  return items;
+}
+
+/**
+ * Flush a consolidated event group: emit one event-log entry and one access event.
+ */
+function flushEventGroup(items) {
+  if (items.length === 0) return;
+
+  const sn = items[0].sn;
+  const linkId = items[0].linkId;
+  const ts = new Date().toISOString();
+
+  // Collect data across all items in the group
+  let primaryItem = null;       // the main Access event (granted/denied)
+  let detailItem = null;        // more-specific Access event (e.g. 0x1300 with reason)
+  let credentialReport = null;
+  let cardBitCount = null;
+  const lockStateChanges = [];
+
+  for (const item of items) {
+    const lookup = lookupEvent(item.auditCode);
+
+    // Grab credentialReport from any item that has it
+    if (!credentialReport && item.credentialReport?.length) {
+      credentialReport = item.credentialReport;
+    }
+
+    // Extract card bit count from 0x1300 audit data
+    const bits = extractCardBitCount(item.auditCode);
+    if (bits) cardBitCount = bits;
+
+    // Track lock state changes
+    const mappedState = LOCK_STATE_MAP[String(item.auditCode).toLowerCase()];
+    if (mappedState) lockStateChanges.push(mappedState);
+
+    // Pick the primary event — prefer the most specific Access event
+    if (lookup.category === 'Access') {
+      if (!primaryItem) {
+        primaryItem = item;
+      } else {
+        // Prefer event with a more specific reason (e.g. 0x1300 over 0x0540)
+        const prevLookup = lookupEvent(primaryItem.auditCode);
+        const prevReason = buildReason(primaryItem.auditCode, primaryItem.body);
+        const curReason = buildReason(item.auditCode, item.body);
+        if (!prevReason && curReason) {
+          // Swap: current becomes primary, previous becomes detail
+          detailItem = primaryItem;
+          primaryItem = item;
+        } else if (!detailItem) {
+          detailItem = item;
+        }
+      }
+    }
+  }
+
+  // Apply lock state changes
+  for (const mappedState of lockStateChanges) {
+    if (linkId) {
+      const list = devices.get(sn);
+      if (list) {
+        list.forEach(d => { if (d.linkId === linkId) d.lockState = mappedState; });
+        broadcast('device:list', { sn, devices: list });
+      }
+    }
+  }
+
+  // Extract card data embedded in 0x1300-series audit codes (fallback when credentialReport is absent)
+  const allAuditCodes = items.map(i => i.auditCode);
+  const auditCardData = extractCardDataFromAuditCodes(allAuditCodes);
+  if (auditCardData.cardBitCount && !cardBitCount) cardBitCount = auditCardData.cardBitCount;
+
+  // ── "Learn Card from Swipe" — capture raw card bytes on denied events ──
+  // Per Allegion training: audit events 0x1301-0x1304 contain the raw card bytes
+  // in reverse order. These are the EXACT bytes the lock reads from the card,
+  // left-shifted to byte boundary. We store them so the user can "enroll" the card
+  // by using these exact bytes as the clear PrimeCR (pad with 0xFF, encrypt, push).
+  if (linkId && auditCardData.clearPrimeCrHex) {
+    const isDenied = items.some(i => {
+      const l = lookupEvent(i.auditCode);
+      return l.result === 'denied';
+    });
+    if (isDenied) {
+      const deniedInfo = {
+        cardBitCount: auditCardData.cardBitCount,
+        rawCardHex: auditCardData.rawCardHex,
+        clearPrimeCrHex: auditCardData.clearPrimeCrHex,
+        cardNumber: auditCardData.cardNumber,
+        facilityCode: auditCardData.facilityCode,
+        timestamp: ts,
+        auditCodes: allAuditCodes,
+      };
+      lastDeniedCard.set(linkId, deniedInfo);
+      console.log(`[LearnCard] Captured denied card on ${linkId}: ${auditCardData.cardBitCount}-bit, raw=${auditCardData.rawCardHex}, clearPrimeCr=${auditCardData.clearPrimeCrHex}`);
+      logGatewayEventProcessing('AUDIT CARD EXTRACTION', {
+        sn,
+        source: items[0]?.source,
+        deviceId: linkId,
+        category: 'Access',
+        title: 'Denied credential extracted from 0x1300-series audit events',
+        reason: auditCardData.cardNumber ? `Decoded card ${auditCardData.cardNumber}` : '',
+        explanation: 'This project reconstructed raw card bytes from EGW audit events 0x1301-0x1304 for Learn Card from Swipe.',
+        rawPayload: deniedInfo,
+      });
+      traceGatewayEvent('audit_card_extraction', {
+        sn,
+        source: items[0]?.source,
+        linkId,
+        explanation: 'Reconstructed raw card bytes and clear PrimeCR from 0x1300-series EGW audit events.',
+        extracted: deniedInfo,
+      });
+      broadcast('denied-card', { linkId, ...deniedInfo });
+    }
+  }
+
+  // Inject credentialReport into the primary item's mergedAccessBody if found in any sibling
+  if (primaryItem && credentialReport) {
+    primaryItem.mergedAccessBody.credentialReport = credentialReport;
+  }
+
+  // Build the consolidated event-log entry from the primary access event (or first item)
+  const mainItem = primaryItem || items[0];
+  const mainLookup = lookupEvent(mainItem.auditCode);
+
+  // Combine titles from primary + detail for a richer description
+  const detailLookup = detailItem ? lookupEvent(detailItem.auditCode) : null;
+  const combinedTitle = detailLookup && detailLookup.title !== mainLookup.title
+    ? `${mainLookup.title} — ${detailLookup.title}`
+    : mainLookup.title;
+  const combinedReason = buildReason(mainItem.auditCode, mainItem.body)
+    || (detailItem ? buildReason(detailItem.auditCode, detailItem.body) : '')
+    || '';
+
+  const entry = {
+    sn,
+    eventType: mainItem.auditCode,
+    category: mainLookup.category,
+    title: combinedTitle,
+    result: mainLookup.result,
+    reason: combinedReason,
+    source: mainItem.source,
+    deviceId: linkId,
+    body: mainItem.rawBody,
+    timestamp: ts,
+    workbookMapping: lookupWorkbookRow(mainItem.auditCode),
+  };
+
+  logGatewayEventProcessing('FINAL APP EVENT', {
+    sn,
+    source: mainItem.source,
+    deviceId: linkId,
+    auditCode: mainItem.auditCode,
+    category: entry.category,
+    title: entry.title,
+    reason: entry.reason,
+    mappingStatus: entry.workbookMapping?.matched ? 'Matched ENGAGE workbook row' : 'No workbook match',
+    caption: entry.workbookMapping?.caption || '',
+    eventHex: entry.workbookMapping?.eventHex || '',
+    dataHex: entry.workbookMapping?.dataHex || '',
+    dataDescription: entry.workbookMapping?.dataDescription || '',
+    explanation: 'This is the normalized event stored by the project and sent to the dashboard/API Playground.',
+    rawPayload: entry.body,
+  });
+  traceGatewayEvent('final_app_event', {
+    sn,
+    source: mainItem.source,
+    linkId,
+    auditCode: mainItem.auditCode,
+    workbookMapping: entry.workbookMapping,
+    finalEvent: {
+      eventType: entry.eventType,
+      category: entry.category,
+      title: entry.title,
+      result: entry.result,
+      reason: entry.reason,
+      source: entry.source,
+      deviceId: entry.deviceId,
+      timestamp: entry.timestamp,
+    },
+    explanation: 'Normalized event emitted by this project after processing EGW raw input and workbook mapping.',
+    rawPayload: entry.body,
+  });
+
+  // Build access event if the primary event is an Access category
+  const lockInfo = linkId ? findLock(linkId, sn) : null;
+  if (mainLookup.category === 'Access' && isCredentialNarrativeEvent(mainItem.auditCode)) {
+    const accessLookup = accessService.resolveAccessEvent(linkId, mainItem.mergedAccessBody);
+    const lockName = lockInfo?.deviceName || linkId || 'Unknown Lock';
+
+    // Use audit-code-extracted card data as fallback when credentialReport decryption has no result
+    let presentedCardNumber = accessLookup.presentedCardNumber || null;
+    let decodedCredential = accessLookup.decodedCredential || null;
+    if (!presentedCardNumber && auditCardData.cardNumber) {
+      presentedCardNumber = auditCardData.cardNumber;
+      // Build a synthetic decodedCredential from audit code data
+      const allFormats = [
+        ...require('../src/defaultCardFormats').map(f => ({ ...f, source: 'builtin', id: f.value })),
+        ...(accessService.store.getSnapshot().customCardFormats || []).map(f => ({ ...f, source: 'custom' })),
+      ];
+      const matchedFormat = cardBitCount
+        ? allFormats.find(f => f.payload && Number(f.payload.total_card_bits) === cardBitCount)
+        : null;
+      decodedCredential = {
+        cardNumber: auditCardData.cardNumber,
+        facilityCode: auditCardData.facilityCode,
+        formatLabel: matchedFormat?.label || (cardBitCount ? `${cardBitCount}-bit` : null),
+        formatValue: matchedFormat?.value || null,
+        formatSource: matchedFormat?.source || null,
+        formatId: matchedFormat?.source === 'custom' ? matchedFormat.id : (matchedFormat?.value || null),
+        totalBits: cardBitCount,
+      };
+    }
+
+    // Rebuild subject with card data if we now have it
+    const subject = accessLookup.user?.name
+      ? accessLookup.user.name
+      : accessLookup.user
+        ? `User ${accessLookup.user.usrID}`
+        : presentedCardNumber
+          ? `Card ${presentedCardNumber}`
+          : accessLookup.subject;
+
+    const detail = combinedTitle
+      ? combinedTitle.replace(/^Access Granted(?: \(Pass-Through\)| \(One-Time Use\))?$/i, '').replace(/^Denied\s+[—-]\s*/i, '').trim()
+      : '';
+    const prefix = mainLookup.result === 'granted'
+      ? 'Access granted'
+      : mainLookup.result === 'denied'
+        ? 'Access denied'
+        : (entry.title || 'Access event');
+
+    let friendlyText = `${prefix} for ${subject} at ${lockName}`;
+    if (mainLookup.result === 'denied') {
+      const denialDetail = detail || combinedReason || '';
+      if (denialDetail) friendlyText += ` — ${denialDetail}`;
+    }
+
+    entry.displaySubject = subject;
+    entry.lockName = lockName;
+    entry.friendlyText = friendlyText;
+    entry.presentedCardNumber = presentedCardNumber;
+    entry.decodedCredential = decodedCredential;
+    entry.cardBitCount = cardBitCount || null;
+
+    const accessEvent = {
+      id: `${ts}-${sn}-${linkId || 'gateway'}`,
+      sn,
+      linkId,
+      lockName,
+      result: mainLookup.result,
+      title: combinedTitle,
+      friendlyText,
+      subject,
+      presentedCardNumber,
+      decodedCredential,
+      cardBitCount: cardBitCount || null,
+      timestamp: ts,
+      user: accessLookup.user,
+      reason: combinedReason,
+    };
+    recentAccessEvents.unshift(accessEvent);
+    if (recentAccessEvents.length > 25) recentAccessEvents.pop();
+    broadcast('access:event', accessEvent);
+  }
+
+  auditStore.insert(entry);
+  broadcast('engage:event', entry);
+}
 
 // Forward gateway events to SSE clients, enriched with human-readable metadata
 server.on('engage:event', ({ sn, event }) => {
@@ -477,231 +1317,375 @@ server.on('engage:event', ({ sn, event }) => {
   console.log(`║  Body       : ${rawBodyStr}`);
   console.log(`╚═══════════════════════════════════════════════════════`);
 
-  // Parse the event body — the gateway wraps audit events inside
-  // body.edgeDevice.audits[] or body.gateway.audits[]
-  let body = {};
-  try {
-    body = typeof event.eventBody === 'string'
-      ? JSON.parse(event.eventBody)
-      : (event.eventBody || {});
-  } catch { /* ignore */ }
-
-  const container = body.edgeDevice || body.gateway || {};
-  const audits = Array.isArray(container.audits) ? container.audits : [];
-  const firstAudit = audits[0] || {};
-
-  // Log decoded audit info
-  const linkId0 = container.linkId || event.eventDeviceId || '—';
-  if (audits.length > 0) {
-    audits.forEach((a, i) => {
-      const lk = lookupEvent(a.event || event.eventType);
-      console.log(`  audit[${i}]: ${a.event || '—'}  →  ${lk.title} (${lk.result})  time=${a.time || '—'}`);
-    });
-  } else {
-    const lk = lookupEvent(event.eventType);
-    console.log(`  (no audits array) eventType=${event.eventType}  →  ${lk.title} (${lk.result})`);
-  }
-  if (container.credentialReport?.length) {
-    console.log(`  credentialReport: ${JSON.stringify(container.credentialReport)}`);
-  }
-  console.log(`  linkId: ${linkId0}  |  audits: ${audits.length}`);
-
-  if (audits.length > 1) {
-    const sourceKey = body.edgeDevice ? 'edgeDevice' : (body.gateway ? 'gateway' : null);
-    audits.forEach((auditItem, auditIndex) => {
-      const auditCode = auditItem?.event || event.eventType;
-      const linkId = container.linkId || event.eventDeviceId;
-      const lookup = lookupEvent(auditCode);
-      const auditScopedBody = sourceKey
-        ? {
-            ...body,
-            [sourceKey]: {
-              ...container,
-              audits: [auditItem],
-            },
-          }
-        : body;
-      const mergedAccessBody = {
-        ...body,
-        ...container,
-        ...auditItem,
-      };
-      const entry = {
-        sn,
-        eventType: auditCode,
-        category: lookup.category,
-        title: lookup.title,
-        result: lookup.result,
-        reason: buildReason(auditCode, auditScopedBody),
-        source: event.eventSource,
-        deviceId: linkId,
-        body: typeof event.eventBody === 'string'
-          ? JSON.stringify(auditScopedBody)
-          : auditScopedBody,
-        timestamp: new Date().toISOString(),
-      };
-
-      const lockInfo = linkId ? findLock(linkId, sn) : null;
-      if (lookup.category === 'Access') {
-        const accessLookup = accessService.resolveAccessEvent(linkId, mergedAccessBody);
-        const lockName = lockInfo?.deviceName || linkId || 'Unknown Lock';
-        const detail = entry.title
-          ? entry.title.replace(/^Access Granted(?: \(Pass-Through\)| \(One-Time Use\))?$/i, '').replace(/^Denied\s+[â€”-]\s*/i, '').trim()
-          : '';
-        const prefix = lookup.result === 'granted'
-          ? 'Access granted'
-          : lookup.result === 'denied'
-            ? 'Access denied'
-            : (entry.title || 'Access event');
-
-        let friendlyText = `${prefix} for ${accessLookup.subject} at ${lockName}`;
-        if (lookup.result === 'denied') {
-          const denialDetail = detail || entry.reason || '';
-          if (denialDetail) friendlyText += ` â€” ${denialDetail}`;
-        }
-
-        entry.displaySubject = accessLookup.subject;
-        entry.lockName = lockName;
-        entry.friendlyText = friendlyText;
-        entry.presentedCardNumber = accessLookup.presentedCardNumber || null;
-        entry.decodedCredential = accessLookup.decodedCredential || null;
-
-        const accessEvent = {
-          id: `${entry.timestamp}-${sn}-${linkId || 'gateway'}-${auditIndex}`,
-          sn,
-          linkId,
-          lockName,
-          result: lookup.result,
-          title: entry.title,
-          friendlyText,
-          subject: accessLookup.subject,
-          presentedCardNumber: accessLookup.presentedCardNumber || null,
-          decodedCredential: accessLookup.decodedCredential || null,
-          timestamp: entry.timestamp,
-          user: accessLookup.user,
-          reason: entry.reason,
-        };
-        recentAccessEvents.unshift(accessEvent);
-        if (recentAccessEvents.length > 25) recentAccessEvents.pop();
-        broadcast('access:event', accessEvent);
-      }
-
-      const LOCK_STATE_MAP = {
-        '0f000000': 'passage',
-        '0f010000': 'secure',
-        '0f020000': 'momentaryUnlock',
-      };
-      const mappedState = auditCode ? LOCK_STATE_MAP[String(auditCode).toLowerCase()] : null;
-      if (mappedState && linkId) {
-        const list = devices.get(sn);
-        if (list) {
-          list.forEach(d => { if (d.linkId === linkId) d.lockState = mappedState; });
-          broadcast('device:list', { sn, devices: list });
-        }
-      }
-
-      auditStore.insert(entry);
-      broadcast('engage:event', entry);
-    });
-    return;
-  }
-
-  // Real audit event code lives in audits[0].event (e.g. "0f010000")
-  // Fall back to the outer eventType only if audits array is empty
-  const auditCode = audits.length > 0 ? audits[0].event : event.eventType;
-  const linkId = container.linkId || event.eventDeviceId;
-
-  const lookup = lookupEvent(auditCode);
-
-  const entry = {
+  recordGatewayTraffic({
     sn,
-    eventType: auditCode,
-    category: lookup.category,
-    title: lookup.title,
-    result: lookup.result,
-    reason: buildReason(auditCode, body),
-    source: event.eventSource,
-    deviceId: linkId,
-    body: event.eventBody,
-    timestamp: new Date().toISOString(),
-  };
+    category: 'gateway-event',
+    method: 'EVENT',
+    path: `/events/${event.eventSource || 'gateway'}`,
+    responseStatus: 'event',
+    durationMs: 0,
+    source: 'gateway',
+    responseBody: {
+      eventId: event.eventId,
+      eventType: event.eventType,
+      eventSource: event.eventSource,
+      eventDeviceId: event.eventDeviceId,
+      eventBody: parseJsonSafe(event.eventBody) ?? event.eventBody,
+    },
+  });
 
-  const mergedAccessBody = {
-    ...body,
-    ...container,
-    ...firstAudit,
-  };
+  const parsed = parseGatewayEvent(sn, event);
 
-  const lockInfo = linkId ? findLock(linkId, sn) : null;
-  if (lookup.category === 'Access') {
-    const accessLookup = accessService.resolveAccessEvent(linkId, mergedAccessBody);
-    const lockName = lockInfo?.deviceName || linkId || 'Unknown Lock';
-    const detail = entry.title
-      ? entry.title.replace(/^Access Granted(?: \(Pass-Through\)| \(One-Time Use\))?$/i, '').replace(/^Denied\s+[—-]\s*/i, '').trim()
-      : '';
-    const prefix = lookup.result === 'granted'
-      ? 'Access granted'
-      : lookup.result === 'denied'
-        ? 'Access denied'
-        : (entry.title || 'Access event');
+  for (const item of parsed) {
+    const bufferKey = `${sn}:${item.linkId || 'gateway'}`;
+    let group = eventBuffer.get(bufferKey);
 
-    let friendlyText = `${prefix} for ${accessLookup.subject} at ${lockName}`;
-    if (lookup.result === 'denied') {
-      const denialDetail = detail || entry.reason || '';
-      if (denialDetail) friendlyText += ` — ${denialDetail}`;
+    if (!group) {
+      group = { timer: null, items: [] };
+      eventBuffer.set(bufferKey, group);
     }
 
-    entry.displaySubject = accessLookup.subject;
-    entry.lockName = lockName;
-    entry.friendlyText = friendlyText;
-    entry.presentedCardNumber = accessLookup.presentedCardNumber || null;
-    entry.decodedCredential = accessLookup.decodedCredential || null;
+    // Clear previous flush timer — more events are arriving
+    if (group.timer) clearTimeout(group.timer);
 
-    const accessEvent = {
-      id: `${entry.timestamp}-${sn}-${linkId || 'gateway'}`,
-      sn,
-      linkId,
-      lockName,
-      result: lookup.result,
-      title: entry.title,
-      friendlyText,
-      subject: accessLookup.subject,
-      presentedCardNumber: accessLookup.presentedCardNumber || null,
-      decodedCredential: accessLookup.decodedCredential || null,
-      timestamp: entry.timestamp,
-      user: accessLookup.user,
-      reason: entry.reason,
-    };
-    recentAccessEvents.unshift(accessEvent);
-    if (recentAccessEvents.length > 25) recentAccessEvents.pop();
-    broadcast('access:event', accessEvent);
+    group.items.push(item);
+
+    // Schedule flush after quiet period
+    group.timer = setTimeout(() => {
+      eventBuffer.delete(bufferKey);
+      flushEventGroup(group.items);
+    }, EVENT_CONSOLIDATION_MS);
   }
-
-  // Keep local lock state cache in sync when gateway reports a state change
-  const LOCK_STATE_MAP = {
-    '0f000000': 'passage',   // Lock State: Passage
-    '0f010000': 'secure',    // Lock State: Secured
-    '0f020000': 'momentaryUnlock',
-  };
-  const mappedState = auditCode ? LOCK_STATE_MAP[String(auditCode).toLowerCase()] : null;
-  if (mappedState && linkId) {
-    const list = devices.get(sn);
-    if (list) {
-      list.forEach(d => { if (d.linkId === linkId) d.lockState = mappedState; });
-      broadcast('device:list', { sn, devices: list });
-    }
-  }
-
-  auditStore.insert(entry);
-  broadcast('engage:event', entry);
 });
 
 // ── Mount dashboard routes (before startServer) ────────────────────────────────
 
 const app = server.app;
 
+function parseGatewayRequestBody(req) {
+  if (req.body == null) return '';
+  if (Buffer.isBuffer(req.body)) return req.body.toString('utf8');
+  if (typeof req.body === 'string') return req.body;
+  if (typeof req.body === 'object' && Object.keys(req.body).length === 0) return '';
+  return JSON.stringify(req.body);
+}
+
+function gatewayResponsePayload(response) {
+  return parseJsonSafe(response?.responseMessageBody) ?? response?.responseMessageBody ?? null;
+}
+
+function multipleGatewaySelectionError(res) {
+  return res.status(400).json({
+    error: 'Multiple gateways are connected. Specify the target gateway with the X-Gateway-SN header or gateway_sn query parameter.',
+    connectedGateways: Array.from(gateways.keys()),
+  });
+}
+
+async function proxyGatewayRoute(req, res, options = {}) {
+  const sn = resolveGatewaySn(req, options.gatewaySn);
+  if (!sn) {
+    if (gateways.size > 1) return multipleGatewaySelectionError(res);
+    return res.status(404).json({ error: 'No connected gateway is available' });
+  }
+
+  const method = options.method || req.method;
+  const reqPath = options.path || req.path;
+  const body = Object.prototype.hasOwnProperty.call(options, 'body')
+    ? options.body
+    : parseGatewayRequestBody(req);
+
+  const response = await request(sn, method, reqPath, body, options.timeoutSec || 30, {
+    category: 'compat-route',
+    source: 'postman-compat',
+    notes: options.notes || null,
+  });
+
+  if (!response) {
+    if (typeof options.onTimeout === 'function') {
+      return res.status(200).json(options.onTimeout(sn));
+    }
+    return res.status(503).json({ error: `Gateway ${sn} did not respond`, gateway_sn: sn, path: reqPath });
+  }
+
+  if (typeof options.onSuccess === 'function') {
+    await options.onSuccess(response, sn);
+  }
+
+  const parsed = gatewayResponsePayload(response);
+  const httpStatus = Number.parseInt(response.responseStatus, 10);
+  if (Number.isFinite(httpStatus)) {
+    return res.status(httpStatus).json(parsed ?? {});
+  }
+  return res.json(parsed ?? {});
+}
+
 // Static files (serves public/index.html at /)
 app.use(express.static(path.join(__dirname, '../public')));
+
+app.get('/gateway/newCredentials', requireDefaultGatewayAuth, (req, res) => {
+  const sn = resolveGatewaySn(req);
+  if (!sn) {
+    if (gateways.size > 1) return multipleGatewaySelectionError(res);
+    return res.status(404).json({ error: 'No connected gateway is available to initialize credentials for' });
+  }
+
+  const username = `gateway-${sn.slice(-8).toLowerCase()}`;
+  const password = crypto.randomBytes(18).toString('base64url');
+  const pending = {
+    username,
+    password,
+    targetSn: sn,
+    createdAt: new Date().toISOString(),
+    createdAtMs: Date.now(),
+  };
+  gatewayPendingCredentials.set(sn, pending);
+
+  res.json({
+    user: pending.username,
+    password: pending.password,
+    gateway_sn: sn,
+    message: 'Call PUT /gateway/newCredentials with the default credentials to commit this API session.',
+  });
+});
+
+app.put('/gateway/newCredentials', requireDefaultGatewayAuth, (req, res) => {
+  const sn = resolveGatewaySn(req);
+  if (!sn) {
+    if (gateways.size > 1) return multipleGatewaySelectionError(res);
+    return res.status(404).json({ error: 'No connected gateway is available to commit credentials for' });
+  }
+
+  const pending = gatewayPendingCredentials.get(sn);
+  if (!pending) {
+    return res.status(409).json({ error: 'No pending gateway credentials exist. Call GET /gateway/newCredentials first.' });
+  }
+
+  for (const [username, session] of gatewayCommittedCredentials.entries()) {
+    if (session.targetSn === sn) {
+      gatewayCommittedCredentials.delete(username);
+    }
+  }
+
+  const committed = {
+    ...pending,
+    committedAt: new Date().toISOString(),
+    committedAtMs: Date.now(),
+  };
+  gatewayCommittedCredentials.set(committed.username, committed);
+  gatewayPendingCredentials.delete(sn);
+
+  res.json({
+    user: committed.username,
+    password: committed.password,
+    gateway_sn: sn,
+    committedAt: committed.committedAt,
+  });
+});
+
+app.get('/gateway/time', requireGatewayApiSession, async (req, res) => {
+  await proxyGatewayRoute(req, res, {
+    onTimeout: (sn) => getGatewayTimeSnapshot(sn),
+  });
+});
+
+app.put('/gateway/config', requireGatewayApiSession, parseJsonBody, async (req, res) => {
+  await proxyGatewayRoute(req, res);
+});
+
+app.get('/gateway/deviceInfo', requireGatewayApiSession, async (req, res) => {
+  await proxyGatewayRoute(req, res, {
+    onTimeout: (sn) => getGatewayDeviceSnapshot(sn),
+  });
+});
+
+app.get('/gateway/scanList', requireGatewayApiSession, async (req, res) => {
+  await proxyGatewayRoute(req, res, {
+    onTimeout: (sn) => getGatewayScanSnapshot(sn),
+  });
+});
+
+app.post('/edgeDevices', requireGatewayApiSession, parseJsonBody, async (req, res) => {
+  await proxyGatewayRoute(req, res, {
+    onSuccess: async (_response, sn) => { await discoverDevices(sn); },
+  });
+});
+
+app.get('/edgeDevices/linkList', requireGatewayApiSession, async (req, res) => {
+  await proxyGatewayRoute(req, res, {
+    onSuccess: async (_response, sn) => { await discoverDevices(sn); },
+  });
+});
+
+app.put('/edgeDevices/lockControl', requireGatewayApiSession, parseJsonBody, async (req, res) => {
+  await proxyGatewayRoute(req, res);
+});
+
+app.get('/edgeDevices/lockStatus', requireGatewayApiSession, async (req, res) => {
+  await proxyGatewayRoute(req, res);
+});
+
+app.delete('/edgeDevices/:linkId', requireGatewayApiSession, async (req, res, next) => {
+  if (req.params.linkId === 'audits') return next();
+  await proxyGatewayRoute(req, res, {
+    onSuccess: async (_response, sn) => { await discoverDevices(sn); },
+  });
+});
+
+app.put('/edgeDevices/:linkId/database', requireGatewayApiSession, parseJsonBody, async (req, res) => {
+  await proxyGatewayRoute(req, res, {
+    onSuccess: async (response, sn) => {
+      const linkId = req.params.linkId;
+      updateDatabasePushState(linkId, {
+        sn,
+        status: String(response.responseStatus) === '200' ? 'in-progress' : 'failed',
+        progress: 0,
+        responseStatus: response.responseStatus,
+        rawPushResponse: gatewayResponsePayload(response),
+        requestPayload: parseJsonSafe(parseGatewayRequestBody(req)) ?? parseGatewayRequestBody(req),
+        summary: { mode: 'compat-database' },
+      });
+      if (String(response.responseStatus) === '200') {
+        startDbStatusPolling(sn, linkId);
+      }
+    },
+  });
+});
+
+app.delete('/edgeDevices/:linkId/database', requireGatewayApiSession, async (req, res) => {
+  await proxyGatewayRoute(req, res, {
+    onSuccess: async (response, sn) => {
+      const linkId = req.params.linkId;
+      if (databasePollers.has(linkId)) {
+        clearInterval(databasePollers.get(linkId));
+        databasePollers.delete(linkId);
+      }
+      updateDatabasePushState(linkId, {
+        sn,
+        status: String(response.responseStatus) === '200' ? 'cancelled' : 'failed',
+        progress: null,
+        responseStatus: response.responseStatus,
+        rawCancelResponse: gatewayResponsePayload(response),
+      });
+    },
+  });
+});
+
+app.get('/edgeDevices/:linkId/dbDownloadStatus', requireGatewayApiSession, async (req, res) => {
+  const sn = resolveGatewaySn(req);
+  if (!sn) {
+    if (gateways.size > 1) return multipleGatewaySelectionError(res);
+    return res.status(404).json({ error: 'No connected gateway is available' });
+  }
+  try {
+    const liveStatus = await fetchDbDownloadStatus(sn, req.params.linkId);
+    updateDatabasePushState(req.params.linkId, {
+      sn,
+      status: liveStatus.state,
+      progress: liveStatus.progress,
+      rawStatus: liveStatus.raw,
+      responseStatus: liveStatus.responseStatus,
+    });
+    res.json(liveStatus.raw ?? liveStatus);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/edgeDevices/:linkId/config', requireGatewayApiSession, parseJsonBody, async (req, res) => {
+  await proxyGatewayRoute(req, res);
+});
+
+app.delete('/edgeDevices/:linkId/config', requireGatewayApiSession, async (req, res) => {
+  await proxyGatewayRoute(req, res);
+});
+
+app.get('/edgeDevices/:linkId/params', requireGatewayApiSession, async (req, res) => {
+  await proxyGatewayRoute(req, res);
+});
+
+app.get('/edgeDevices/:linkId/audits', requireGatewayApiSession, (req, res) => {
+  const sn = resolveGatewaySn(req);
+  if (!sn) {
+    if (gateways.size > 1) return multipleGatewaySelectionError(res);
+    return res.status(404).json({ error: 'No connected gateway is available' });
+  }
+  res.json({
+    linkId: req.params.linkId,
+    gateway_sn: sn,
+    audits: filterAuditEntries(req.params.linkId, sn),
+  });
+});
+
+app.delete('/edgeDevices/:linkId/audits', requireGatewayApiSession, (req, res) => {
+  const sn = resolveGatewaySn(req);
+  if (!sn) {
+    if (gateways.size > 1) return multipleGatewaySelectionError(res);
+    return res.status(404).json({ error: 'No connected gateway is available' });
+  }
+  const removed = auditStore.deleteWhere(entry =>
+    entry.sn === sn && String(entry.linkId || '') === String(req.params.linkId)
+  );
+  res.json({
+    linkId: req.params.linkId,
+    gateway_sn: sn,
+    cleared: removed,
+  });
+});
+
+app.get('/edgeDevices/audits', requireGatewayApiSession, (req, res) => {
+  const sn = resolveGatewaySn(req);
+  if (!sn) {
+    if (gateways.size > 1) return multipleGatewaySelectionError(res);
+    return res.status(404).json({ error: 'No connected gateway is available' });
+  }
+  res.json({
+    gateway_sn: sn,
+    audits: filterAuditEntries(null, sn),
+  });
+});
+
+app.delete('/edgeDevices/audits', requireGatewayApiSession, (req, res) => {
+  const sn = resolveGatewaySn(req);
+  if (!sn) {
+    if (gateways.size > 1) return multipleGatewaySelectionError(res);
+    return res.status(404).json({ error: 'No connected gateway is available' });
+  }
+  const removed = auditStore.deleteWhere(entry => entry.sn === sn);
+  res.json({
+    gateway_sn: sn,
+    cleared: removed,
+  });
+});
+
+app.put('/edgeDevices/:linkId/lockControl', requireGatewayApiSession, parseJsonBody, async (req, res) => {
+  await proxyGatewayRoute(req, res);
+});
+
+app.get('/edgeDevices/:linkId/lockStatus', requireGatewayApiSession, async (req, res) => {
+  await proxyGatewayRoute(req, res);
+});
+
+app.get('/edgeDevices/:linkId/time', requireGatewayApiSession, async (req, res) => {
+  await proxyGatewayRoute(req, res);
+});
+
+app.get('/gateway/gatewayNetworkStatistics', requireGatewayApiSession, (req, res) => {
+  const sn = resolveGatewaySn(req);
+  if (!sn) {
+    if (gateways.size > 1) return multipleGatewaySelectionError(res);
+    return res.status(404).json({ error: 'No connected gateway is available' });
+  }
+  res.json(getGatewayNetworkStatisticsSnapshot(sn));
+});
+
+app.get('/gateway/gatewayEventLog', requireGatewayApiSession, (req, res) => {
+  const sn = resolveGatewaySn(req);
+  if (!sn) {
+    if (gateways.size > 1) return multipleGatewaySelectionError(res);
+    return res.status(404).json({ error: 'No connected gateway is available' });
+  }
+  res.json(getGatewayEventLogSnapshot(sn));
+});
 
 // GET /api/stream — Server-Sent Events for real-time dashboard updates
 app.get('/api/stream', (req, res) => {
@@ -748,7 +1732,7 @@ app.post('/api/lock', parseJsonBody, async (req, res) => {
     return res.status(400).json({ error: 'gateway_sn, link_id, and action are required' });
   }
 
-  const validActions = ['secure', 'passage', 'momentaryUnlock'];
+  const validActions = ['secure', 'passage', 'momentaryUnlock', 'frozenSecure', 'frozenPassage'];
   if (!validActions.includes(action)) {
     return res.status(400).json({ error: `action must be one of: ${validActions.join(', ')}` });
   }
@@ -1053,15 +2037,23 @@ app.post('/api/access/push/:linkId', parseJsonBody, async (req, res) => {
       summary: preview.summary,
     });
 
+    const requestPayload = preview.payload;
     const response = await request(
       lockInfo.sn,
       'PUT',
       `/edgeDevices/${linkId}/database`,
-      JSON.stringify(preview.payload),
+      JSON.stringify(requestPayload),
       20
     );
 
     if (!response) {
+      updateDatabasePushState(linkId, {
+        sn: lockInfo.sn,
+        status: 'failed',
+        error: 'Gateway did not respond to the database push request',
+        requestPayload,
+        summary: preview.summary,
+      });
       return res.status(503).json({
         error: 'Gateway did not respond to the database push request',
         retryable: true,
@@ -1075,6 +2067,7 @@ app.post('/api/access/push/:linkId', parseJsonBody, async (req, res) => {
       progress: 0,
       rawPushResponse: rawResponse ?? response.responseMessageBody,
       responseStatus: response.responseStatus,
+      requestPayload,
       summary: preview.summary,
     });
     startDbStatusPolling(lockInfo.sn, linkId);
@@ -1084,6 +2077,7 @@ app.post('/api/access/push/:linkId', parseJsonBody, async (req, res) => {
       lock: lockInfo,
       preview: preview.summary,
       initialResponse: rawResponse ?? response.responseMessageBody,
+      requestPayload,
       status: next,
     });
   } catch (err) {
@@ -1093,6 +2087,346 @@ app.post('/api/access/push/:linkId', parseJsonBody, async (req, res) => {
       error: err.message,
     });
     res.status(400).json({ error: err.message });
+  }
+});
+
+// GET /api/access/pull/:linkId — Read lock DB status via dbDownloadStatus
+// NOTE: ENGAGE gateway does not support GET on /database — only PUT.
+// The dbDownloadStatus endpoint returns userCount, scheduleCount, state, etc.
+app.get('/api/access/pull/:linkId', async (req, res) => {
+  const linkId = req.params.linkId;
+  const gatewaySn = req.query.gateway_sn || null;
+  const lockInfo = findLock(linkId, gatewaySn);
+  if (!lockInfo) {
+    return res.status(404).json({ error: `Lock ${linkId} was not found` });
+  }
+
+  try {
+    const liveStatus = await fetchDbDownloadStatus(lockInfo.sn, linkId);
+    const pushState = updateDatabasePushState(linkId, {
+      sn: lockInfo.sn,
+      status: liveStatus.state,
+      progress: liveStatus.progress,
+      rawStatus: liveStatus.raw,
+      responseStatus: liveStatus.responseStatus,
+    });
+    res.json({
+      ok: true,
+      lockStatus: liveStatus,
+      pushState,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/access/rawpush/:linkId — Push a raw doorfile for diagnostic testing.
+// Accepts a complete JSON payload OR a raw encryptedPrimeCr hex to test with.
+// This bypasses our encoding entirely so we can isolate whether the issue is
+// our PrimeCR encoding or the database delivery mechanism.
+app.post('/api/access/rawpush/:linkId', parseJsonBody, async (req, res) => {
+  const linkId = req.params.linkId;
+  const gatewaySn = req.body?.gateway_sn || req.query.gateway_sn || null;
+  const lockInfo = findLock(linkId, gatewaySn);
+  if (!lockInfo) {
+    return res.status(404).json({ error: `Lock ${linkId} was not found` });
+  }
+
+  try {
+    let payload;
+
+    if (req.body?.rawPayload) {
+      // Use caller-provided full payload
+      payload = req.body.rawPayload;
+    } else if (req.body?.encryptedPrimeCr) {
+      // Build minimal spec-conforming doorfile with caller's encrypted PrimeCR
+      payload = {
+        db: {
+          usrRcrd: {
+            deleteAll: 1,
+            delete: [],
+            update: [],
+            add: [{
+              usrID: Number(req.body.usrID) || 20020,
+              adaEn: 0,
+              fnctn: 'norm',
+              crSch: 1,
+              actDtTm: '20000101000000',
+              expDtTm: '21350101000000',
+              primeCr: String(req.body.encryptedPrimeCr).trim(),
+              prCrTyp: 'card',
+              scndCrTyp: 'null',
+            }],
+          },
+          schedules: [{
+            days: ['Su','Mo','Tu','We','Th','Fr','Sa'],
+            strtHr: 0, strtMn: 0, lngth: 1440,
+          }],
+          holidays: [],
+          autoUnlock: [],
+        },
+        dbDwnLdTm: '',
+        nxtDbVerTS: `0x${Date.now().toString(16).padStart(16, '0')}`,
+      };
+    } else {
+      return res.status(400).json({
+        error: 'Provide either rawPayload (full JSON) or encryptedPrimeCr (hex string)',
+        example: {
+          encryptedPrimeCr: '2ccdb42e3c61b8b23385f832fcb7b7f8',
+          gateway_sn: lockInfo.sn,
+        },
+      });
+    }
+
+    const payloadStr = typeof payload === 'string' ? payload : JSON.stringify(payload);
+    console.log(`[RawPush] Sending raw doorfile to ${linkId}:`, payloadStr.slice(0, 500));
+
+    const response = await request(lockInfo.sn, 'PUT', `/edgeDevices/${linkId}/database`, payloadStr, 20);
+    if (!response) {
+      return res.status(503).json({ error: 'Gateway did not respond' });
+    }
+
+    const rawResponse = parseJsonSafe(response.responseMessageBody);
+    updateDatabasePushState(linkId, {
+      sn: lockInfo.sn,
+      status: String(response.responseStatus) === '200' ? 'pushing' : 'failed',
+      progress: 0,
+      rawPushResponse: rawResponse ?? response.responseMessageBody,
+      responseStatus: response.responseStatus,
+      requestPayload: payload,
+      summary: { mode: 'raw-diagnostic' },
+    });
+
+    if (String(response.responseStatus) === '200') {
+      startDbStatusPolling(lockInfo.sn, linkId);
+    }
+
+    res.json({
+      ok: String(response.responseStatus) === '200',
+      responseStatus: response.responseStatus,
+      sentPayload: payload,
+      gatewayResponse: rawResponse ?? response.responseMessageBody,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/access/last-denied/:linkId — Get the last denied card raw data for "Learn Card from Swipe"
+app.get('/api/access/last-denied/:linkId', (req, res) => {
+  const linkId = req.params.linkId;
+  const denied = lastDeniedCard.get(linkId);
+  if (!denied) {
+    return res.json({ ok: false, message: 'No denied card captured yet. Swipe a card on the lock first.' });
+  }
+  // Encrypt the clear PrimeCR for preview
+  let encryptedPrimeCrHex = null;
+  try {
+    const siteKey = accessService._cachedSiteKey || (() => {
+      try { return require('fs').readFileSync(accessService.siteKeyFile, 'utf8').trim(); } catch { return null; }
+    })();
+    if (siteKey && denied.clearPrimeCrHex) {
+      const result = encryptClearPrimeCr(denied.clearPrimeCrHex, siteKey);
+      encryptedPrimeCrHex = result.encryptedHex;
+    }
+  } catch (err) {
+    console.warn('[LearnCard] Failed to encrypt:', err.message);
+  }
+
+  res.json({
+    ok: true,
+    linkId,
+    ...denied,
+    encryptedPrimeCrHex,
+  });
+});
+
+// POST /api/access/enroll-swipe/:linkId — Enroll the last denied card using raw bytes from audit events
+// This uses the EXACT bytes the lock read from the card → guaranteed PrimeCR match
+app.post('/api/access/enroll-swipe/:linkId', parseJsonBody, async (req, res) => {
+  const linkId = req.params.linkId;
+  const gatewaySn = req.body?.gateway_sn || req.query.gateway_sn || null;
+  const lockInfo = findLock(linkId, gatewaySn);
+  if (!lockInfo) {
+    return res.status(404).json({ error: `Lock ${linkId} was not found` });
+  }
+
+  const denied = lastDeniedCard.get(linkId);
+  if (!denied || !denied.clearPrimeCrHex) {
+    return res.status(400).json({ error: 'No denied card captured. Swipe a card on the lock first.' });
+  }
+
+  try {
+    const siteKey = accessService._cachedSiteKey || (() => {
+      try { return require('fs').readFileSync(accessService.siteKeyFile, 'utf8').trim(); } catch { return null; }
+    })();
+    if (!siteKey) {
+      return res.status(500).json({ error: 'Site key not available' });
+    }
+
+    const { encryptedHex, clearHex } = encryptClearPrimeCr(denied.clearPrimeCrHex, siteKey);
+    const userName = req.body?.name || `Swiped Card (${denied.cardBitCount}-bit)`;
+    const usrID = Number(req.body?.usrID) || (20000 + Math.floor(Math.random() * 40000));
+
+    // Build doorfile matching Allegion's exact format
+    const payload = {
+      db: {
+        usrRcrd: {
+          deleteAll: 1,
+          delete: [],
+          update: [],
+          add: [{
+            usrID,
+            adaEn: 0,
+            fnctn: 'norm',
+            crSch: 1,
+            actDtTm: '20000101000000',
+            expDtTm: '21350101000000',
+            primeCr: encryptedHex,
+            prCrTyp: 'card',
+            scndCrTyp: 'null',
+          }],
+        },
+        schedules: [{
+          days: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'],
+          strtHr: 0, strtMn: 0, lngth: 1440,
+        }],
+        holidays: [],
+        autoUnlock: [],
+      },
+      dbDwnLdTm: '',
+      nxtDbVerTS: `0x${Date.now().toString(16).padStart(16, '0')}`,
+    };
+
+    console.log(`[EnrollSwipe] Enrolling swiped card on ${linkId}: usrID=${usrID}, clearPrimeCr=${clearHex}, encryptedPrimeCr=${encryptedHex}`);
+    console.log(`[EnrollSwipe] Payload:`, JSON.stringify(payload));
+
+    const response = await request(lockInfo.sn, 'PUT', `/edgeDevices/${linkId}/database`, JSON.stringify(payload), 20);
+    if (!response) {
+      return res.status(503).json({ error: 'Gateway did not respond' });
+    }
+
+    const rawResponse = parseJsonSafe(response.responseMessageBody);
+    const ok = String(response.responseStatus) === '200';
+
+    updateDatabasePushState(linkId, {
+      sn: lockInfo.sn,
+      status: ok ? 'pushing' : 'failed',
+      progress: 0,
+      rawPushResponse: rawResponse ?? response.responseMessageBody,
+      responseStatus: response.responseStatus,
+      requestPayload: payload,
+      summary: {
+        mode: 'enroll-swipe',
+        userCount: 1,
+        usrID,
+        cardBitCount: denied.cardBitCount,
+        rawCardHex: denied.rawCardHex,
+        clearPrimeCrHex: clearHex,
+        encryptedPrimeCrHex: encryptedHex,
+        cardNumber: denied.cardNumber,
+        facilityCode: denied.facilityCode,
+      },
+    });
+
+    if (ok) {
+      startDbStatusPolling(lockInfo.sn, linkId);
+    }
+
+    res.json({
+      ok,
+      responseStatus: response.responseStatus,
+      enrolled: {
+        usrID,
+        cardBitCount: denied.cardBitCount,
+        rawCardHex: denied.rawCardHex,
+        clearPrimeCrHex: clearHex,
+        encryptedPrimeCrHex: encryptedHex,
+        cardNumber: denied.cardNumber,
+        facilityCode: denied.facilityCode,
+      },
+      sentPayload: payload,
+      gatewayResponse: rawResponse ?? response.responseMessageBody,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/access/clear/:linkId — Clear all credentials from the lock
+app.post('/api/access/clear/:linkId', parseJsonBody, async (req, res) => {
+  const linkId = req.params.linkId;
+  const gatewaySn = req.body?.gateway_sn || req.query.gateway_sn || null;
+  const lockInfo = findLock(linkId, gatewaySn);
+  if (!lockInfo) {
+    return res.status(404).json({ error: `Lock ${linkId} was not found` });
+  }
+
+  try {
+    const clearPayload = {
+      db: {
+        usrRcrd: { deleteAll: 1, delete: [], update: [], add: [] },
+        schedules: [{ days: ['Su','Mo','Tu','We','Th','Fr','Sa'], strtHr: 0, strtMn: 0, lngth: 1440 }],
+        holidays: [],
+        autoUnlock: [],
+      },
+      dbDwnLdTm: '',
+      nxtDbVerTS: `0x${Date.now().toString(16).padStart(16, '0')}`,
+    };
+
+    const response = await request(
+      lockInfo.sn,
+      'PUT',
+      `/edgeDevices/${linkId}/database`,
+      JSON.stringify(clearPayload),
+      20
+    );
+
+    if (!response) {
+      return res.status(503).json({ error: 'Gateway did not respond to the clear database request' });
+    }
+
+    const rawResponse = parseJsonSafe(response.responseMessageBody);
+    updateDatabasePushState(linkId, {
+      sn: lockInfo.sn,
+      status: String(response.responseStatus) === '200' ? 'clearing' : 'failed',
+      progress: 0,
+      rawPushResponse: rawResponse ?? response.responseMessageBody,
+      responseStatus: response.responseStatus,
+      requestPayload: clearPayload,
+      summary: { mode: 'clear-all', userCount: 0, scheduleCount: 1 },
+    });
+
+    if (String(response.responseStatus) === '200') {
+      startDbStatusPolling(lockInfo.sn, linkId);
+    }
+
+    // Also clear local users assigned to this lock
+    const clearLocal = req.body?.clearLocal !== false; // default true
+    let removedUsers = 0;
+    if (clearLocal) {
+      accessService.store.mutate((state) => {
+        const before = state.users.length;
+        state.users = state.users.filter(u => {
+          if (!Array.isArray(u.lockIds)) return true;
+          // Remove this lock from the user's lockIds
+          u.lockIds = u.lockIds.filter(id => id !== linkId);
+          // If user has no more locks, remove them entirely
+          return u.lockIds.length > 0;
+        });
+        removedUsers = before - state.users.length;
+      });
+    }
+
+    res.json({
+      ok: String(response.responseStatus) === '200',
+      responseStatus: response.responseStatus,
+      initialResponse: rawResponse ?? response.responseMessageBody,
+      requestPayload: clearPayload,
+      removedLocalUsers: removedUsers,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -1130,6 +2464,46 @@ app.delete('/api/access/push/:linkId', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/playground/send — Generic proxy: send any ENGAGE WebSocket API request to a gateway
+app.post('/api/playground/send', parseJsonBody, async (req, res) => {
+  const { gateway_sn, method, path: reqPath, body: reqBody } = req.body || {};
+  if (!gateway_sn || !method || !reqPath) {
+    return res.status(400).json({ error: 'gateway_sn, method, and path are required' });
+  }
+  const validMethods = ['GET', 'POST', 'PUT', 'DELETE'];
+  if (!validMethods.includes(method.toUpperCase())) {
+    return res.status(400).json({ error: `method must be one of: ${validMethods.join(', ')}` });
+  }
+  const sn = gateway_sn.toUpperCase();
+  if (!gateways.has(sn)) {
+    return res.status(404).json({ error: `Gateway ${sn} is not connected` });
+  }
+  const bodyStr = reqBody ? (typeof reqBody === 'string' ? reqBody : JSON.stringify(reqBody)) : '';
+  const sentAt = new Date().toISOString();
+  try {
+    const response = await request(sn, method.toUpperCase(), reqPath, bodyStr, 30, {
+      category: 'playground-send',
+      source: 'api-playground',
+    });
+    if (!response) {
+      return res.status(503).json({ error: 'Gateway did not respond within timeout', sentAt, sentMethod: method.toUpperCase(), sentPath: reqPath, sentBody: reqBody || null });
+    }
+    const parsedBody = parseJsonSafe(response.responseMessageBody);
+    res.json({
+      ok: true,
+      responseStatus: response.responseStatus,
+      responseBody: parsedBody ?? response.responseMessageBody,
+      sentAt,
+      sentMethod: method.toUpperCase(),
+      sentPath: reqPath,
+      sentBody: reqBody || null,
+      receivedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message, sentAt, sentMethod: method.toUpperCase(), sentPath: reqPath, sentBody: reqBody || null });
   }
 });
 

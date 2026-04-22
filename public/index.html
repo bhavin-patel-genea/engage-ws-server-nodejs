@@ -476,7 +476,7 @@
       flex: 1;
       min-height: 0;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 420px;
+      grid-template-columns: minmax(0, 1fr) 480px;
       grid-template-rows: auto minmax(0, 1fr);
       overflow: hidden;
       background: linear-gradient(180deg, rgba(10, 14, 22, 0.98), rgba(13, 17, 23, 1));
@@ -545,7 +545,7 @@
       min-height: 0;
       display: grid;
       grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-      grid-template-rows: minmax(280px, 1fr) minmax(190px, 0.72fr);
+      grid-template-rows: minmax(340px, 1fr) minmax(240px, 0.72fr);
       grid-template-areas:
         "users schedules"
         "formats formats";
@@ -663,16 +663,16 @@
     .access-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 11px;
+      font-size: 13px;
     }
     .access-table th, .access-table td {
-      padding: 10px 8px;
+      padding: 10px 10px;
       border-bottom: 1px solid rgba(45,55,72,.55);
       vertical-align: top;
     }
     .access-table th {
       color: var(--text-muted);
-      font-size: 10px;
+      font-size: 11px;
       text-transform: uppercase;
       letter-spacing: .08em;
       background: rgba(28,34,48,.55);
@@ -720,11 +720,11 @@
     }
     .access-preview-json {
       flex: 1 1 auto;
-      min-height: 240px;
+      min-height: 300px;
       margin: 0;
       padding: 12px;
       overflow: auto;
-      font-size: 10px;
+      font-size: 11px;
       color: #cbd5e1;
       background: #0b1220;
       white-space: pre-wrap;
@@ -732,6 +732,7 @@
     }
     .status-box {
       padding: 12px;
+      overflow: auto;
     }
     .status-line {
       display: flex;
@@ -739,10 +740,35 @@
       gap: 12px;
       padding: 6px 0;
       border-bottom: 1px solid rgba(45,55,72,.45);
-      font-size: 11px;
+      font-size: 12px;
     }
     .status-line span {
       color: var(--text-muted);
+    }
+    .status-detail-section {
+      margin-top: 10px;
+    }
+    .status-detail-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+    .status-detail-json {
+      margin: 0;
+      padding: 10px;
+      font-size: 11px;
+      font-family: 'Fira Code', 'Consolas', monospace;
+      color: #cbd5e1;
+      background: #0b1220;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 300px;
+      overflow: auto;
     }
     .lock-settings-box {
       padding: 12px;
@@ -893,45 +919,6 @@
       font-size: 10px;
       color: var(--text-muted);
     }
-    .swipe-feed {
-      padding: 12px;
-      overflow: auto;
-      min-height: 160px;
-      max-height: 240px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .swipe-item {
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 10px;
-      background: var(--surface2);
-    }
-    .swipe-item.granted {
-      border-color: rgba(34,197,94,.35);
-      background: rgba(34,197,94,.08);
-    }
-    .swipe-item.denied {
-      border-color: rgba(239,68,68,.35);
-      background: rgba(239,68,68,.08);
-    }
-    .swipe-result {
-      font-size: 10px;
-      font-weight: 800;
-      letter-spacing: .08em;
-      color: var(--text-muted);
-      margin-bottom: 4px;
-    }
-    .swipe-text {
-      font-size: 12px;
-      line-height: 1.4;
-    }
-    .swipe-time {
-      margin-top: 6px;
-      color: var(--text-muted);
-      font-size: 10px;
-    }
     .access-modal {
       position: fixed;
       inset: 0;
@@ -1072,6 +1059,267 @@
       font-weight: 700;
       cursor: pointer;
     }
+    /* ── API Playground ──────────────────────────────────────────────── */
+    .playground-page {
+      flex: 1; min-height: 0; display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0; overflow: hidden;
+      background: linear-gradient(180deg, rgba(10,14,22,.98), rgba(13,17,23,1));
+    }
+    .pg-left, .pg-right {
+      display: flex; flex-direction: column; overflow: hidden;
+      min-width: 0;
+      min-height: 0;
+    }
+    .pg-left  {
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      overflow-x: hidden;
+      scrollbar-gutter: stable;
+    }
+    .pg-section {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      flex: 0 0 auto;
+    }
+    .pg-section-label {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--text-dim); margin-bottom: 8px;
+    }
+    .pg-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .pg-select {
+      flex: 1; min-width: 180px; padding: 7px 10px; font-size: 12px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); font-family: inherit;
+    }
+    .pg-desc {
+      font-size: 11px; color: var(--text-dim); margin-top: 6px; line-height: 1.4;
+    }
+    .pg-helper-shell {
+      border-bottom: 1px solid var(--border);
+      background: rgba(20,26,38,.88);
+      flex: 0 0 auto;
+    }
+    .pg-helper-header {
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid rgba(255,255,255,.04);
+      background: rgba(255,255,255,.02);
+    }
+    .pg-helper-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .pg-helper-subtitle {
+      font-size: 11px;
+      color: var(--text-dim);
+      flex: 1;
+    }
+    .pg-helper-body {
+      padding: 14px 16px;
+      display: grid;
+      gap: 12px;
+    }
+    .pg-helper-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+    .pg-helper-card {
+      padding: 12px;
+      border: 1px solid rgba(148,163,184,.18);
+      border-radius: 10px;
+      background: rgba(15,23,42,.7);
+    }
+    .pg-helper-card h4 {
+      margin: 0 0 6px;
+      font-size: 12px;
+      color: var(--text);
+    }
+    .pg-helper-card p {
+      margin: 0;
+      font-size: 11px;
+      line-height: 1.45;
+      color: var(--text-dim);
+    }
+    .pg-helper-meta {
+      margin-top: 8px;
+      font-size: 10px;
+      color: #93c5fd;
+      line-height: 1.4;
+    }
+    .pg-helper-form {
+      display: grid;
+      gap: 10px;
+    }
+    .pg-helper-field {
+      display: grid;
+      gap: 6px;
+    }
+    .pg-helper-field label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .pg-helper-note {
+      font-size: 10px;
+      line-height: 1.45;
+      color: var(--text-dim);
+    }
+    .pg-helper-hint {
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: rgba(37,99,235,.08);
+      border: 1px solid rgba(59,130,246,.18);
+      font-size: 11px;
+      line-height: 1.5;
+      color: #bfdbfe;
+    }
+    .pg-helper-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .pg-helper-btn {
+      padding: 7px 12px;
+      border-radius: 6px;
+      border: 1px solid rgba(148,163,184,.25);
+      background: rgba(255,255,255,.04);
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .pg-helper-btn.primary {
+      background: rgba(37,99,235,.18);
+      border-color: rgba(59,130,246,.4);
+      color: #dbeafe;
+    }
+    .pg-helper-table {
+      display: grid;
+      gap: 8px;
+    }
+    .pg-helper-row {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: minmax(0, 180px) minmax(0, 140px) minmax(0, 1fr);
+      align-items: start;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: rgba(255,255,255,.025);
+      border: 1px solid rgba(148,163,184,.12);
+    }
+    .pg-helper-key {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text);
+      font-family: 'Fira Code','Consolas',monospace;
+    }
+    .pg-helper-key small {
+      display: block;
+      margin-top: 4px;
+      font-family: inherit;
+      font-size: 10px;
+      font-weight: 400;
+      color: var(--text-dim);
+    }
+    .pg-helper-check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--text);
+    }
+    .pg-helper-example {
+      margin-top: 8px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #0b1220;
+      color: #cbd5e1;
+      font-size: 11px;
+      line-height: 1.5;
+      font-family: 'Fira Code','Consolas',monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .pg-editor {
+      flex: 0 0 auto; min-height: 260px; resize: vertical;
+      font-family: 'Fira Code','Consolas',monospace; font-size: 12px;
+      background: #0b1220; color: #cbd5e1; border: none; outline: none;
+      padding: 14px 16px; line-height: 1.55; tab-size: 2;
+    }
+    .pg-validation {
+      padding: 8px 16px; font-size: 11px; line-height: 1.5;
+      max-height: 120px; overflow-y: auto;
+      flex: 0 0 auto;
+    }
+    .pg-validation.has-errors { background: rgba(239,68,68,.08); color: #fca5a5; }
+    .pg-validation.is-valid  { background: rgba(34,197,94,.06); color: #86efac; }
+    .pg-val-item { padding: 2px 0; }
+    .pg-val-field { color: #fbbf24; font-weight: 600; }
+    .pg-actions {
+      padding: 10px 16px; display: flex; gap: 10px; align-items: center;
+      border-top: 1px solid var(--border); background: rgba(28,34,48,.55);
+      flex: 0 0 auto;
+      position: sticky;
+      bottom: 0;
+      z-index: 2;
+      backdrop-filter: blur(8px);
+    }
+    .pg-send-btn {
+      padding: 8px 24px; font-size: 12px; font-weight: 700;
+      background: #2563eb; color: #fff; border: none; border-radius: 6px; cursor: pointer;
+    }
+    .pg-send-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .pg-send-btn.loading { background: #1e40af; }
+    .pg-status-tag {
+      display: inline-block; padding: 3px 10px; border-radius: 4px;
+      font-size: 11px; font-weight: 700; margin-right: 8px;
+    }
+    .pg-status-200 { background: rgba(34,197,94,.15); color: #4ade80; }
+    .pg-status-err { background: rgba(239,68,68,.15); color: #f87171; }
+    .pg-response-pre {
+      flex: 1; min-height: 0; margin: 0; padding: 14px 16px; overflow: auto;
+      font-size: 12px; font-family: 'Fira Code','Consolas',monospace;
+      color: #cbd5e1; background: #0b1220; white-space: pre-wrap; word-break: break-word;
+    }
+    .pg-event-row {
+      padding: 6px 16px; font-size: 11px; border-bottom: 1px solid rgba(255,255,255,.04);
+      display: flex; gap: 8px; align-items: flex-start;
+    }
+    .pg-event-row:hover { background: rgba(255,255,255,.03); }
+    .pg-event-time { color: var(--text-dim); flex-shrink: 0; font-family: monospace; }
+    .pg-event-type { font-weight: 600; flex-shrink: 0; min-width: 100px; }
+    .pg-event-body { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; }
+    .pg-event-granted { color: #4ade80; }
+    .pg-event-denied  { color: #f87171; }
+    .pg-event-info    { color: #60a5fa; }
+    .pg-event-warning { color: #fbbf24; }
+    .pg-empty { padding: 24px 16px; text-align: center; color: var(--text-dim); font-size: 12px; }
+    .pg-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+    .pg-tab-bar {
+      display: flex; border-bottom: 1px solid var(--border); background: rgba(28,34,48,.55);
+    }
+    .pg-tab {
+      padding: 8px 16px; font-size: 11px; font-weight: 600; cursor: pointer;
+      border-bottom: 2px solid transparent; color: var(--text-dim); background: none; border-top: none; border-left: none; border-right: none;
+    }
+    .pg-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .view-shell[hidden] { display: none !important; }
+    .pg-badge {
+      display: inline-block; background: var(--accent); color: #fff; font-size: 9px;
+      font-weight: 700; padding: 1px 6px; border-radius: 8px; margin-left: 4px;
+    }
+
+    @media (max-width: 1280px) {
+      .playground-page { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+      .pg-left { border-right: none; border-bottom: 1px solid var(--border); }
+    }
+
     @media (max-width: 1280px) {
       .access-page {
         grid-template-columns: 1fr;
@@ -1165,9 +1413,10 @@
 <!-- ── Header ──────────────────────────────────────────────────────────────── -->
 <header>
   <div class="logo">ENGAGE <span>Gateway Dashboard</span></div>
-  <div class="mode-switch">
-    <button class="mode-btn mode-btn-active" id="mode-live" type="button" onclick="if(window.accessUI)window.accessUI.switchView('live')">Live Control</button>
-    <button class="mode-btn" id="mode-access" type="button" onclick="if(window.accessUI)window.accessUI.switchView('access')">Access Database</button>
+  <div class="mode-switch" role="tablist" aria-label="Dashboard sections">
+    <button class="mode-btn mode-btn-active" id="mode-live" type="button" role="tab" aria-selected="true" aria-controls="live-view" onclick="if(window.accessUI)window.accessUI.switchView('live')">Live Control</button>
+    <button class="mode-btn" id="mode-access" type="button" role="tab" aria-selected="false" aria-controls="access-view" onclick="if(window.accessUI)window.accessUI.switchView('access')">Access Database</button>
+    <button class="mode-btn" id="mode-playground" type="button" role="tab" aria-selected="false" aria-controls="playground-view" onclick="if(window.accessUI)window.accessUI.switchView('playground')">API Playground</button>
   </div>
   <div class="header-meta">
     <div class="server-badge">
@@ -1179,7 +1428,7 @@
 </header>
 
 <!-- ── Main layout ───────────────────────────────────────────────────────────── -->
-<div class="layout" id="live-view">
+<div class="layout view-shell" id="live-view" role="tabpanel" aria-labelledby="mode-live">
 
   <!-- ── Sidebar: gateways ─────────────────────────────────────────────────── -->
   <div class="sidebar">
@@ -1296,7 +1545,7 @@
 </div>
 
 <!-- ── Toast ──────────────────────────────────────────────────────────────────── -->
-<div class="access-page" id="access-view" hidden>
+<div class="access-page view-shell" id="access-view" role="tabpanel" aria-labelledby="mode-access" hidden>
   <aside class="access-sidebar">
     <div class="section-header">
       Target Locks
@@ -1312,6 +1561,9 @@
       <button class="toolbar-btn primary" type="button" onclick="window.accessUI.openUserModal()">Add Credential</button>
       <button class="toolbar-btn" type="button" onclick="window.accessUI.openScheduleModal()">Add Schedule</button>
       <button class="toolbar-btn" type="button" onclick="window.accessUI.openFormatModal()">Custom Card Format</button>
+      <button class="toolbar-btn" type="button" onclick="window.accessUI.pullDatabase()" title="Read current database from the selected lock">&#x1F4E5; Pull DB</button>
+      <button class="toolbar-btn warn" type="button" onclick="window.accessUI.clearDatabase()" title="Wipe all credentials from the selected lock">&#x1F5D1; Clear Lock DB</button>
+      <button class="toolbar-btn" type="button" onclick="window.accessUI.learnCardFromSwipe()" title="Swipe a card (denied), then click to capture and enroll it" style="background:#2d7d46;color:#fff">&#x1F4B3; Learn Card from Swipe</button>
       <div class="toolbar-spacer">Select a lock to preview the exact ENGAGE database payload and review transfer status.</div>
     </div>
 
@@ -1392,19 +1644,21 @@
   </main>
 
   <aside class="access-right">
-    <div class="section-header collapsible collapsed" data-collapse-key="payload-preview" onclick="toggleSection(this)">
+    <div class="section-header collapsible" data-collapse-key="payload-preview" onclick="toggleSection(this)">
       <span><span class="collapse-icon">&#9660;</span>Payload Preview</span>
+      <button class="mini-btn" type="button" style="margin-left:auto;font-size:9px;padding:2px 8px" onclick="event.stopPropagation();window.accessUI.viewPreviewPayload()">&#x1F50D; Open Full</button>
     </div>
-    <div class="collapsible-body collapsed">
+    <div class="collapsible-body">
       <div class="access-preview-meta">
         <div class="access-preview-title" id="access-preview-title">No lock selected</div>
         <div class="access-preview-summary" id="access-preview-summary">Select a lock to build a payload preview.</div>
       </div>
-      <pre class="access-preview-json" id="access-preview-json"></pre>
+      <pre class="access-preview-json" id="access-preview-json" style="cursor:pointer" onclick="window.accessUI.viewPreviewPayload()" title="Click to open full payload"></pre>
     </div>
 
     <div class="section-header collapsible" data-collapse-key="transfer-status" onclick="toggleSection(this)" style="border-top:1px solid var(--border)">
       <span><span class="collapse-icon">&#9660;</span>Transfer Status</span>
+      <button class="mini-btn" type="button" style="margin-left:auto;font-size:9px;padding:2px 8px" onclick="event.stopPropagation();window.accessUI.viewTransferStatus()">&#x1F50D; Open Full</button>
     </div>
     <div class="collapsible-body">
       <div class="status-box" id="access-transfer-status">
@@ -1412,15 +1666,103 @@
       </div>
     </div>
 
-    <div class="section-header collapsible" data-collapse-key="recent-swipes" onclick="toggleSection(this)" style="border-top:1px solid var(--border)">
-      <span><span class="collapse-icon">&#9660;</span>Recent Swipes</span>
+  </aside>
+</div>
+
+<!-- ── API Playground View ──────────────────────────────────────────────── -->
+<div class="playground-page view-shell" id="playground-view" role="tabpanel" aria-labelledby="mode-playground" hidden>
+
+  <!-- Left panel: API selector + payload editor -->
+  <div class="pg-left">
+    <div class="pg-section">
+      <div class="pg-section-label">ENGAGE WebSocket API</div>
+      <div class="pg-row">
+        <select class="pg-select" id="pg-api-select" onchange="window.playgroundUI.onApiChange()"></select>
+        <select class="pg-select" id="pg-gateway-select" onchange="window.playgroundUI.onGatewayChange()" style="max-width:200px"></select>
+      </div>
+      <div class="pg-row" style="margin-top:8px">
+        <select class="pg-select" id="pg-lock-select" onchange="window.playgroundUI.onLockChange()"></select>
+      </div>
+      <div class="pg-desc" id="pg-api-desc"></div>
     </div>
-    <div class="collapsible-body">
-      <div class="swipe-feed" id="access-swipe-feed">
-        <div class="access-empty">No swipe activity yet.</div>
+    <div class="pg-helper-shell" id="pg-helper-shell" hidden>
+      <div class="pg-helper-header">
+        <div class="pg-helper-title">Guided Builder</div>
+        <div class="pg-helper-subtitle" id="pg-helper-subtitle">Use structured controls, then sync the generated payload into the JSON editor.</div>
+        <button class="pg-helper-btn" type="button" onclick="window.playgroundUI.openHelpModal()">Field Guide</button>
+      </div>
+      <div class="pg-helper-body" id="pg-helper-body"></div>
+    </div>
+    <div class="pg-section" style="padding-bottom:6px">
+      <div class="pg-section-label">Request Payload <span style="font-weight:400;text-transform:none;letter-spacing:0">(editable JSON)</span></div>
+    </div>
+    <textarea class="pg-editor" id="pg-payload-editor" spellcheck="false" placeholder="No payload required for this API"></textarea>
+    <div class="pg-validation" id="pg-validation"></div>
+    <div class="pg-actions">
+      <button class="pg-send-btn" id="pg-send-btn" onclick="window.playgroundUI.send()">Send Request</button>
+      <span id="pg-send-status" style="font-size:11px;color:var(--text-dim)"></span>
+      <span style="margin-left:auto;font-size:10px;color:var(--text-dim)" id="pg-timing"></span>
+    </div>
+  </div>
+
+  <!-- Right panel: response + event log -->
+  <div class="pg-right">
+    <div class="pg-tab-bar">
+      <button class="pg-tab active" id="pg-tab-response" onclick="window.playgroundUI.switchTab('response')">Response</button>
+      <button class="pg-tab" id="pg-tab-sent" onclick="window.playgroundUI.switchTab('sent')">Data Sent</button>
+      <button class="pg-tab" id="pg-tab-events" onclick="window.playgroundUI.switchTab('events')">Events <span class="pg-badge" id="pg-event-count" style="display:none">0</span></button>
+    </div>
+
+    <!-- Response tab -->
+    <div id="pg-panel-response" class="pg-scroll" style="display:flex;flex-direction:column;flex:1;min-height:0">
+      <div class="pg-section" id="pg-response-header" style="display:none">
+        <span class="pg-status-tag" id="pg-response-status"></span>
+        <span style="font-size:11px;color:var(--text-dim)" id="pg-response-path"></span>
+      </div>
+      <pre class="pg-response-pre" id="pg-response-body" style="flex:1;min-height:0">Send a request to see the response here.</pre>
+    </div>
+
+    <!-- Data Sent tab -->
+    <div id="pg-panel-sent" class="pg-scroll" style="display:none;flex-direction:column;flex:1;min-height:0">
+      <div class="pg-section" id="pg-sent-header" style="display:none">
+        <span style="font-size:11px;font-weight:600;color:var(--text)" id="pg-sent-method-path"></span>
+      </div>
+      <pre class="pg-response-pre" id="pg-sent-body" style="flex:1;min-height:0">No request sent yet.</pre>
+    </div>
+
+    <!-- Events tab -->
+    <div id="pg-panel-events" style="display:none;flex-direction:column;flex:1;min-height:0">
+      <div class="pg-section" style="display:flex;align-items:center;gap:8px">
+        <div class="pg-section-label" style="margin-bottom:0;flex:1">Live Events <span id="pg-capture-indicator" style="color:#4ade80;display:none"> ● Capturing</span></div>
+        <button class="light-btn" style="font-size:10px;padding:3px 10px" onclick="window.playgroundUI.clearEvents()">Clear</button>
+        <button class="light-btn" style="font-size:10px;padding:3px 10px" id="pg-capture-toggle" onclick="window.playgroundUI.toggleCapture()">Stop</button>
+      </div>
+      <div class="pg-scroll" id="pg-event-list">
+        <div class="pg-empty">Events will appear here after sending a request.</div>
       </div>
     </div>
-  </aside>
+  </div>
+
+</div>
+
+<div class="access-modal" id="access-json-modal">
+  <div class="access-modal-card" style="width:90vw;max-width:1100px;height:85vh;display:flex;flex-direction:column">
+    <div class="access-modal-header">
+      <span id="access-json-modal-title">Payload</span>
+      <button class="light-btn" type="button" onclick="window.accessUI.closeModal('access-json-modal')">Close</button>
+    </div>
+    <pre id="access-json-modal-body" style="flex:1;min-height:0;margin:0;padding:16px;overflow:auto;font-size:12px;font-family:'Fira Code','Consolas',monospace;color:#cbd5e1;background:#0b1220;white-space:pre-wrap;word-break:break-word;border-radius:0 0 12px 12px"></pre>
+  </div>
+</div>
+
+<div class="access-modal" id="pg-help-modal">
+  <div class="access-modal-card" style="width:min(920px,92vw);max-height:84vh;display:flex;flex-direction:column">
+    <div class="access-modal-header">
+      <span id="pg-help-title">API Help</span>
+      <button class="light-btn" type="button" onclick="window.playgroundUI.closeHelpModal()">Close</button>
+    </div>
+    <div id="pg-help-body" style="padding:16px;overflow:auto;font-size:12px;line-height:1.6;color:var(--text);background:rgba(15,23,42,.92)"></div>
+  </div>
 </div>
 
 <div class="access-modal" id="access-user-modal">
@@ -1510,7 +1852,7 @@
         </div>
         <div class="form-field">
           <label for="access-schedule-length">Length (minutes)</label>
-          <input id="access-schedule-length" type="number" min="1" max="1439" required />
+          <input id="access-schedule-length" type="number" min="1" max="1440" required />
         </div>
       </div>
 
@@ -1719,10 +2061,12 @@ sse.addEventListener('device:list', e => {
 sse.addEventListener('engage:event', e => {
   const data = JSON.parse(e.data);
   addEvent(data);
+  if (window.playgroundUI) window.playgroundUI.onEvent({ type: 'engage:event', ...data });
 });
 
 sse.addEventListener('lock:result', e => {
-  const { sn, link_id, action, status } = JSON.parse(e.data);
+  const data = JSON.parse(e.data);
+  const { sn, link_id, action, status } = data;
   if (status === '200' && state.devices[sn]) {
     state.devices[sn].forEach(d => {
       if (link_id === 'all' || d.linkId === link_id) d.lockState = action;
@@ -1730,6 +2074,7 @@ sse.addEventListener('lock:result', e => {
     renderDevices();
     syncAccessUi();
   }
+  if (window.playgroundUI) window.playgroundUI.onEvent({ type: 'lock:result', ...data });
 });
 
 sse.addEventListener('access:event', e => {
@@ -1737,12 +2082,14 @@ sse.addEventListener('access:event', e => {
   state.recentAccessEvents.unshift(data);
   if (state.recentAccessEvents.length > 25) state.recentAccessEvents.pop();
   syncAccessUi();
+  if (window.playgroundUI) window.playgroundUI.onEvent({ type: 'access:event', ...data });
 });
 
 sse.addEventListener('database:status', e => {
   const data = JSON.parse(e.data);
   state.databasePushStates[data.linkId] = data;
   syncAccessUi();
+  if (window.playgroundUI) window.playgroundUI.onEvent({ type: 'database:status', ...data });
 });
 
 // Server emits this when a lock command found no connected gateway and is now
@@ -1824,6 +2171,7 @@ function renderDevices() {
           <button class="btn btn-lock"   onclick="lockAction('${esc(d.sn)}','${esc(d.linkId)}','secure',this)">🔒 Lock</button>
           <button class="btn btn-unlock" onclick="lockAction('${esc(d.sn)}','${esc(d.linkId)}','passage',this)">🔓 Unlock</button>
           <button class="btn btn-grant"  onclick="lockAction('${esc(d.sn)}','${esc(d.linkId)}','momentaryUnlock',this)">⚡ Grant</button>
+          <button class="btn" style="background:#2d7d46;color:#fff;font-size:10px" onclick="learnCardFromSwipeLive('${esc(d.sn)}','${esc(d.linkId)}','${esc(d.deviceName||d.linkId)}')">💳 Learn Card</button>
         </div>
       </div>
     `;
@@ -1875,11 +2223,27 @@ function renderEvents() {
     const reason  = ev.reason   || '';
     const device  = ev.deviceId || '';
     const realIdx = state.events.indexOf(ev);
+    const workbookLine = ev.workbookMapping
+      ? workbookSummaryLine(ev.workbookMapping)
+      : '';
+    // Card detail line: show decoded card info or bit count from 0x1300
+    const cardParts = [];
+    if (ev.presentedCardNumber) cardParts.push(`Card: ${esc(ev.presentedCardNumber)}`);
+    if (ev.decodedCredential?.facilityCode) cardParts.push(`FC: ${esc(ev.decodedCredential.facilityCode)}`);
+    if (ev.decodedCredential?.formatLabel) cardParts.push(`Format: ${esc(ev.decodedCredential.formatLabel)}`);
+    if (ev.decodedCredential?.totalBits) cardParts.push(`${esc(String(ev.decodedCredential.totalBits))}-bit`);
+    else if (ev.cardBitCount) cardParts.push(`${esc(String(ev.cardBitCount))}-bit card`);
+    const cardLine = cardParts.length > 0
+      ? `<div style="font-size:10px;color:var(--text-muted);margin-top:2px">${cardParts.join(' | ')}</div>`
+      : '';
+    const mappingLine = workbookLine
+      ? `<div style="font-size:10px;color:var(--text-muted);margin-top:2px">${esc(workbookLine)}</div>`
+      : '';
     return `<tr class="result-${result}" onclick="showEventDetail(state.events[${realIdx}])">
       <td class="ev-time">${fmtTimestamp(ev.timestamp)}</td>
       <td><span class="result-pill ${result}">${resultIcon(result)} ${resultLabel(result)}</span></td>
       <td>${cat ? `<span class="cat-pill">${esc(cat)}</span>` : ''}</td>
-      <td class="ev-title">${esc(title)}</td>
+      <td class="ev-title">${esc(title)}${mappingLine}${cardLine}</td>
       <td style="color:var(--text-muted);font-size:10px;">${esc(device)}</td>
       <td class="ev-reason">${esc(reason)}</td>
     </tr>`;
@@ -1964,6 +2328,46 @@ async function lockAction(sn, linkId, action, btn) {
   }
 }
 
+// ── Learn Card from Swipe (Live Control view) ───────────────────────────────
+
+async function learnCardFromSwipeLive(sn, linkId, deviceName) {
+  try {
+    showToast('Checking for last denied card…', 'info', 2000);
+    const res = await fetch(`/api/access/last-denied/${encodeURIComponent(linkId)}`);
+    const result = await res.json();
+    if (!result.ok) {
+      showToast(result.message || 'No denied card found. Swipe a card on the lock first!', 'warn', 5000);
+      return;
+    }
+    const info = [
+      `Card Bit Count: ${result.cardBitCount}`,
+      `Raw Card Hex: ${result.rawCardHex}`,
+      `Clear PrimeCR: ${result.clearPrimeCrHex}`,
+      `Encrypted PrimeCR: ${result.encryptedPrimeCrHex || '(no site key)'}`,
+      result.cardNumber ? `Decoded Card #: ${result.cardNumber}` : null,
+      result.facilityCode ? `Decoded FC: ${result.facilityCode}` : null,
+      `Captured: ${result.timestamp}`,
+    ].filter(Boolean).join('\n');
+
+    if (confirm(`Last denied card on ${deviceName}:\n\n${info}\n\nEnroll this card? (Push to lock using raw bytes)`)) {
+      showToast(`Enrolling swiped card on ${deviceName}…`, 'info', 5000);
+      const enrollRes = await fetch(`/api/access/enroll-swipe/${encodeURIComponent(linkId)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gateway_sn: sn, name: 'Swiped Card Enrollment' }),
+      });
+      const enrollData = await enrollRes.json();
+      if (enrollData.ok) {
+        showToast(`Card enrolled! usrID=${enrollData.enrolled.usrID}, ${enrollData.enrolled.cardBitCount}-bit. DB push started — swipe again to test!`, 'success', 8000);
+      } else {
+        showToast('Enrollment failed: ' + (enrollData.error || JSON.stringify(enrollData)), 'error');
+      }
+    }
+  } catch (e) {
+    showToast(`Learn card failed: ${e.message}`, 'error');
+  }
+}
+
 // ── Event detail panel ────────────────────────────────────────────────────────
 
 function showEventDetail(ev) {
@@ -2006,13 +2410,27 @@ function showEventDetail(ev) {
       ${row('Device',   ev.deviceId)}
       ${row('Category', ev.category)}
       ${row('Event Code', fmtEventCode(ev.eventType))}
+      ${row('EGW eventType', ev.eventType)}
       ${ev.friendlyText ? row('Summary', ev.friendlyText) : ''}
       ${ev.presentedCardNumber ? row('Presented Card', ev.presentedCardNumber) : ''}
       ${ev.decodedCredential?.facilityCode ? row('Facility Code', ev.decodedCredential.facilityCode) : ''}
       ${ev.decodedCredential?.formatLabel ? row('Card Format', ev.decodedCredential.formatLabel) : ''}
+      ${ev.cardBitCount ? row('Card Bit Count', ev.cardBitCount + '-bit') : ''}
       ${ev.reason ? row('Reason', ev.reason) : ''}
       ${fields.map(([k,v]) => row(k, v)).join('')}
     </div>
+    ${renderWorkbookMapping(ev)}
+    ${ev.result === 'denied' && ev.category === 'Access' ? `
+    <div class="detail-item" style="margin-top:6px">
+      <button class="mini-btn" style="width:100%;padding:6px 12px" type="button" data-swipe="${esc(JSON.stringify({
+        cardNumber: ev.presentedCardNumber || '',
+        facilityCode: ev.decodedCredential?.facilityCode || '',
+        formatSource: ev.decodedCredential?.formatSource || '',
+        formatId: ev.decodedCredential?.formatId || '',
+        linkId: ev.deviceId || '',
+        cardBitCount: ev.decodedCredential?.totalBits || ev.cardBitCount || 0,
+      }))}" onclick="window.accessUI.addUserFromSwipe(this.dataset.swipe)">+ Add User From This Card Swipe</button>
+    </div>` : ''}
 
     ${bodyStr ? `
     <div class="detail-item" style="margin-top:6px">
@@ -2028,6 +2446,38 @@ function row(label, value) {
     <span style="color:var(--text-muted);font-size:11px;min-width:90px;flex-shrink:0">${esc(label)}</span>
     <span style="font-size:11px;word-break:break-all">${esc(String(value))}</span>
   </div>`;
+}
+
+function workbookSummaryLine(mapping) {
+  if (!mapping || !mapping.eventHex) return '';
+  const parts = [mapping.eventHex];
+  if (mapping.dataHex) parts.push(mapping.dataHex);
+  if (mapping.caption) parts.push(mapping.caption);
+  if (!mapping.matched) parts.push('No workbook row match');
+  return parts.join(' | ');
+}
+
+function renderWorkbookMapping(ev) {
+  const mapping = ev.workbookMapping;
+  if (!mapping) return '';
+
+  const explanation = mapping.matched
+    ? 'EGW provides the raw eventType. We split it into workbook Event and Data, then match Event against ENGAGE - Audits - 0.22.xlsm.'
+    : 'EGW provides the raw eventType, but this Event value does not currently match a row in ENGAGE - Audits - 0.22.xlsm.';
+
+  return `
+    <div class="detail-item" style="margin-top:6px">
+      <div style="font-size:10px;font-weight:700;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em">ENGAGE - Audits - 0.22.xlsm Mapping</div>
+      ${row('Caption', mapping.caption || '—')}
+      ${row('Description', mapping.description || '—')}
+      ${row('Audit / Alert', mapping.auditAlert || '—')}
+      ${row('Event', mapping.eventHex || '—')}
+      ${row('Data', mapping.dataHex || '—')}
+      ${row('Data Description', mapping.dataDescription || '—')}
+      ${mapping.sourceCategory ? row('Workbook Section', mapping.sourceCategory) : ''}
+      ${row('Mapping Status', mapping.matched ? 'Matched workbook row' : 'No workbook match')}
+      ${row('How We Map It', explanation)}
+    </div>`;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -2144,6 +2594,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 <script src="/access-ui.js?v=20260402d"></script>
+<script src="/playground-ui.js?v=20260409a"></script>
 
 </body>
 </html>

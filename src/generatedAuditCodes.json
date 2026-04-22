@@ -1,0 +1,1634 @@
+{
+  "0X0100": {
+    "category": "Power",
+    "title": "Low Battery (mV)",
+    "sourceCategory": "Power Audits (0x0100)",
+    "auditAlert": "Both",
+    "caption": "LOW_BATT",
+    "dataDescription": "XXXX = Battery Voltage in millivolt"
+  },
+  "0X0101": {
+    "category": "Power",
+    "title": "Critical Battery (mV)",
+    "sourceCategory": "Power Audits (0x0100)",
+    "auditAlert": "Both",
+    "caption": "CRIT_BATT",
+    "dataDescription": "XXXX = Battery Voltage in millivolt"
+  },
+  "0X0102": {
+    "category": "Power",
+    "title": "Battery Level (mV)",
+    "sourceCategory": "Power Audits (0x0100)",
+    "auditAlert": "Audit",
+    "caption": "LVL_BATT",
+    "dataDescription": "XXXX = Battery Voltage in millivolt"
+  },
+  "0X0180": {
+    "category": "Power",
+    "title": "Input Power Source",
+    "sourceCategory": "Power Audits (0x0100)",
+    "auditAlert": "Audit",
+    "caption": "POWER_SOURCE",
+    "dataDescription": "Input Voltage Source Not Detected"
+  },
+  "0X0181": {
+    "category": "Power",
+    "title": "Line Voltage (mV)",
+    "sourceCategory": "Power Audits (0x0100)",
+    "auditAlert": "Audit",
+    "caption": "POWER_VOLTAGE",
+    "dataDescription": "XXXX = Line voltage in millivolt"
+  },
+  "0X0200": {
+    "category": "BLE",
+    "title": "Connected to App",
+    "sourceCategory": "Bluetooth Low Energy Audits (0x0200)",
+    "auditAlert": "Audit",
+    "caption": "BLE_MAPP_CONNECTED_DUID0",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0208": {
+    "category": "BLE",
+    "title": "Invalid JSON data transfer size",
+    "sourceCategory": "Bluetooth Low Energy Audits (0x0200)",
+    "auditAlert": "Audit",
+    "caption": "BLE_MAPP_DISCONNECT",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0300": {
+    "category": "Reader",
+    "title": "Invalid Reader Configuration",
+    "sourceCategory": "Reader Audits (0x0300)",
+    "auditAlert": "Audit",
+    "caption": "INVALID_READER_CONFIG_IGNORED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0301": {
+    "category": "Reader",
+    "title": "No Tour not supported by reader",
+    "sourceCategory": "Reader Audits (0x0300)",
+    "auditAlert": "Audit",
+    "caption": "NO_TOUR_NOT_SUPPORTED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0302": {
+    "category": "Reader",
+    "title": "Reader Configured for No Tour",
+    "sourceCategory": "Reader Audits (0x0300)",
+    "auditAlert": "Audit",
+    "caption": "READER_CONFIGURED_NO_TOUR",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0303": {
+    "category": "Reader",
+    "title": "Unpaired or unsupported reader detected",
+    "sourceCategory": "Reader Audits (0x0300)",
+    "auditAlert": "Audit",
+    "caption": "UNPAIRED_READER_DETECTED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0400": {
+    "category": "Config",
+    "title": "Configurations Updated",
+    "sourceCategory": "Lock Configuration Audits (0x0400)",
+    "auditAlert": "Audit",
+    "caption": "CONFIG_UPDATE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0401": {
+    "category": "Config",
+    "title": "Configuration Error",
+    "sourceCategory": "Lock Configuration Audits (0x0400)",
+    "auditAlert": "Audit",
+    "caption": "INVALID_LOCK_PARAMETER_REC",
+    "dataDescription": "Invalid Relock Delay"
+  },
+  "0X0402": {
+    "category": "Config",
+    "title": "Prevent Construction Mode Feature",
+    "sourceCategory": "Lock Configuration Audits (0x0400)",
+    "auditAlert": "Audit",
+    "caption": "PREVENT_CONSTRUCTION_MODE",
+    "dataDescription": "Disabled"
+  },
+  "0X0403": {
+    "category": "Config",
+    "title": "ASM Key Updated",
+    "sourceCategory": "Lock Configuration Audits (0x0400)",
+    "auditAlert": "Audit",
+    "caption": "ASM_KEY_UPDATED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0500": {
+    "category": "Access",
+    "title": "Lockdown",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "LOCKDOWN",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0501": {
+    "category": "Access",
+    "title": "Lockdown Canceled",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "LOCKDOWN_CANCELED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0502": {
+    "category": "Access",
+    "title": "Passage",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "PASSAGE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0503": {
+    "category": "Access",
+    "title": "Secured",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "SECURED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0504": {
+    "category": "Access",
+    "title": "Toggle Passage",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "TOGGLE_UNSEC",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0505": {
+    "category": "Access",
+    "title": "Toggle Secured",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "TOGGLE_SEC",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0506": {
+    "category": "Access",
+    "title": "Delete With Alarm",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "DEL_USR_REC_W_AUDIT",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0507": {
+    "category": "Access",
+    "title": "Pass Through",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "PASS_THROUGH",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0508": {
+    "category": "Access",
+    "title": "Access Denied - Not Within Schedule",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "ACCESS_OUTSIDE_TIMEZONE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0509": {
+    "category": "Access",
+    "title": "Access Denied - Before Activaion Date",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "ACCESS_OUTSIDE_ACTIVATION_DATE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X050A": {
+    "category": "Access",
+    "title": "Access Denied - Credential Expired",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "ACCESS_OUTSIDE_EXPIRATION_DATE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X050B": {
+    "category": "Access",
+    "title": "Unknown Credential Presented",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "ACCESS_CARD_TYPE_UNKNOWN",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X050C": {
+    "category": "Access",
+    "title": "Access attempt while in Restricted Secured",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "ACCESS_WHILE_IN_REST_SECURE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X050D": {
+    "category": "Access",
+    "title": "Access attempt while in Lockout",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "ACCESS_WHILE_IN_LOCKOUT",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X050E": {
+    "category": "Access",
+    "title": "One-Time-Use Credential Presented",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "ACCESS_BY_ONETIME_USER",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X050F": {
+    "category": "Access",
+    "title": "Secured - From Restricted Secured",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "STATE_CHG_REST_SEC",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0510": {
+    "category": "Access",
+    "title": "Passage - From Restricted Secured",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "STATE_CHG_REST_PASSAGE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0511": {
+    "category": "Access",
+    "title": "Restricted Secured - from Secured",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "STATE_CHG_SEC_REST",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0512": {
+    "category": "Access",
+    "title": "Restricted Secured - from Passage",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "STATE_CHG_PASS_REST",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0513": {
+    "category": "Access",
+    "title": "Freeze Passage",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "FREEZE_PASSAGE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0514": {
+    "category": "Access",
+    "title": "Freeze Secured",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "FREEZE_SECURED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0515": {
+    "category": "Access",
+    "title": "Privacy On",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "PRIVACY_SECURE_ON",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0516": {
+    "category": "Access",
+    "title": "Privacy Off",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "PRIVACY_SECURE_OFF",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0517": {
+    "category": "Access",
+    "title": "Auto Unlock Event Occurred",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "AUTOUNLOCK_EVENT_OCCURRED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0518": {
+    "category": "Access",
+    "title": "Holiday Schedule Event Occurred",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "HOLIDAY_EVENT_OCCURRED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0519": {
+    "category": "Access",
+    "title": "Dog On Next Exit",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "DOG_ON_NEXT_EXIT",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X051A": {
+    "category": "Access",
+    "title": "Freeze Dog On Next Exit",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "FREEZE_DOG_ON_NEXT_EXIT",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X051B": {
+    "category": "Access",
+    "title": "Double Tap - Passage",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "DOUBLE_TAP_PASSAGE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X051C": {
+    "category": "Access",
+    "title": "Double Tap - Secured",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "DOUBLE_TAP_SECURED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0540": {
+    "category": "Access",
+    "title": "Access Denied",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "ACCESS_DENIED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0541": {
+    "category": "Access",
+    "title": "Access Blocked",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "ACCESS_BLOCKED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0542": {
+    "category": "Access",
+    "title": "Remote Authorization",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "REMOTE_AUTHORIZATION",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0543": {
+    "category": "Access",
+    "title": "Remote Lockdown",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "REMOTE_LOCKDOWN",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0544": {
+    "category": "Access",
+    "title": "Remote Lockdown Clear",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "REMOTE_LOCKDOWN_CLEAR",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0545": {
+    "category": "Access",
+    "title": "Credential Access Temporarily disabled",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "CREDENTIAL_ACCESS_DISABLED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0546": {
+    "category": "Access",
+    "title": "Credential Access enabled",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "CREDENTIAL_ACCESS_ENABLED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0550": {
+    "category": "Access",
+    "title": "Two-Factor",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "TWO_FACTOR",
+    "dataDescription": "Success"
+  },
+  "0X0551": {
+    "category": "Access",
+    "title": "Two-Factor Two-User",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "TWO_FACTOR_TWO_USER",
+    "dataDescription": "User 1 Success"
+  },
+  "0X0552": {
+    "category": "Access",
+    "title": "One-Factor Two-User",
+    "sourceCategory": "Credential Audits (0x0500)",
+    "auditAlert": "Audit",
+    "caption": "ONE_FACTOR_TWO_USER",
+    "dataDescription": "User 1 Success"
+  },
+  "0X0600": {
+    "category": "Database",
+    "title": "Database Error",
+    "sourceCategory": "Database Audits (0x0600)",
+    "auditAlert": "Audit",
+    "caption": "USR_REC_OPS",
+    "dataDescription": "Add User Failed"
+  },
+  "0X0601": {
+    "category": "Database",
+    "title": "Doorfile Update Successful",
+    "sourceCategory": "Database Audits (0x0600)",
+    "auditAlert": "Audit",
+    "caption": "USER_DB_UPDATE_COMPLETE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0602": {
+    "category": "Database",
+    "title": "Audit Upload Triggered",
+    "sourceCategory": "Database Audits (0x0600)",
+    "auditAlert": "Audit",
+    "caption": "AUDIT_UPLOAD_TRIG",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0603": {
+    "category": "Database",
+    "title": "User Database Sorting Status",
+    "sourceCategory": "Database Audits (0x0600)",
+    "auditAlert": "Audit",
+    "caption": "USER_DB_PRESORT_RESULT",
+    "dataDescription": "Database Presorted"
+  },
+  "0X0604": {
+    "category": "Database",
+    "title": "User Database Corrupt",
+    "sourceCategory": "Database Audits (0x0600)",
+    "auditAlert": "Both",
+    "caption": "USER_DB_CORRUPT",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0605": {
+    "category": "Database",
+    "title": "Audits Lost Before Read",
+    "sourceCategory": "Database Audits (0x0600)",
+    "auditAlert": "Audit",
+    "caption": "AUDIT_BUFFEROVERUN",
+    "dataDescription": "Device not serviced before losing audits"
+  },
+  "0X0606": {
+    "category": "Database",
+    "title": "Doorfile Partial Database Download",
+    "sourceCategory": "Database Audits (0x0600)",
+    "auditAlert": "Audit",
+    "caption": "USER_DB_PARTIAL_DOWNLOAD",
+    "dataDescription": "XX = packet number"
+  },
+  "0X0607": {
+    "category": "Database",
+    "title": "Doorfile Partial Database Download Fault",
+    "sourceCategory": "Database Audits (0x0600)",
+    "auditAlert": "Audit",
+    "caption": "USER_DB_PARTIAL_DOWNLOAD_FAULT",
+    "dataDescription": "Out of Order"
+  },
+  "0X0608": {
+    "category": "Database",
+    "title": "Incremental Database User Update Count",
+    "sourceCategory": "Database Audits (0x0600)",
+    "auditAlert": "Audit",
+    "caption": "USER_DB_PARTIAL_UPDATE_COUNT",
+    "dataDescription": "XXXX = Number of updates"
+  },
+  "0X0609": {
+    "category": "Database",
+    "title": "Partial Database Action",
+    "sourceCategory": "Database Audits (0x0600)",
+    "auditAlert": "Audit",
+    "caption": "USER_DB_PARTIAL_UPDATE_STATUS",
+    "dataDescription": "User(s) Added"
+  },
+  "0X0700": {
+    "category": "Door",
+    "title": "Forced Door Alert",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Both",
+    "caption": "FORCED_DOOR",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0701": {
+    "category": "Door",
+    "title": "Propped Door Event",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "PROPPED_DOOR",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0702": {
+    "category": "Door",
+    "title": "Tamper Alert",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Both",
+    "caption": "TAMPER",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0703": {
+    "category": "Door",
+    "title": "Magnetic Tamper Alert",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Both",
+    "caption": "DPS_TAMPER",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0704": {
+    "category": "Door",
+    "title": "Request to Exit Triggered",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "REX",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0705": {
+    "category": "Door",
+    "title": "DPS Communication Failure",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "DPS_COMM_FAILURE,",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0706": {
+    "category": "Door",
+    "title": "Stuck Tamper Switch",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "STUCK_TAMPER",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0707": {
+    "category": "Door",
+    "title": "Dead Bolt Extended",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "DB_EXTENDED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0708": {
+    "category": "Door",
+    "title": "Dead Bolt Retracted",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "DB_RETRACTED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0709": {
+    "category": "Door",
+    "title": "Latch Bolt Extended",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "LBM_EXTENDED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X070A": {
+    "category": "Door",
+    "title": "Latch Bolt Retracted",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "LBM_RETRACTED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X070B": {
+    "category": "Door",
+    "title": "Interior Push Button Activated",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Both",
+    "caption": "IPB",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X070C": {
+    "category": "Door",
+    "title": "Motor transition failure, State mismatch found during unlock operation",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "MOTOR_TRANSITION_FAILURE",
+    "dataDescription": "State mismatch during Unlock"
+  },
+  "0X070D": {
+    "category": "Door",
+    "title": "Failure of Dogging Latch Hook And Trigger",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "DOG_ON_NEXT_EXIT_FAILURE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X070E": {
+    "category": "Door",
+    "title": "Door Closed, Latch Not Extended",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "DPS_NO_LATCH_EXT",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X070F": {
+    "category": "Door",
+    "title": "Temp Sensor Raw Value",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "TEMP",
+    "dataDescription": "XXXX = ADC Counts"
+  },
+  "0X0710": {
+    "category": "Door",
+    "title": "Light Sensor Raw Value",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "LIGHT",
+    "dataDescription": "XXXX = ADC Counts"
+  },
+  "0X0711": {
+    "category": "Door",
+    "title": "LX Not Seen During RX Event",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "RX_LX_FAILURE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0712": {
+    "category": "Door",
+    "title": "Remote Release Triggered",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "REL_SWITCH",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0713": {
+    "category": "Door",
+    "title": "Reader Tamper Alert",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Both",
+    "caption": "READER_TAMPER",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0714": {
+    "category": "Door",
+    "title": "Auxiliary Enabled",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "AUX_ENABLED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0715": {
+    "category": "Door",
+    "title": "Auxiliary Disabled",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "AUX_DISABLED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0716": {
+    "category": "Door",
+    "title": "Alarm Enabled",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "ALARM_ENABLED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0717": {
+    "category": "Door",
+    "title": "Alarm Disabled",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "ALARM_DISABLED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0718": {
+    "category": "Door",
+    "title": "Request to Enter",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "REN_SWITCH",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0719": {
+    "category": "Door",
+    "title": "Interior Push Button Stuck",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Both",
+    "caption": "IPB_STUCK",
+    "dataDescription": "IPB Stuck Condition Clear"
+  },
+  "0X071A": {
+    "category": "Door",
+    "title": "Aux Input Triggered",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "AUX_IN",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X071B": {
+    "category": "Door",
+    "title": "Tamper Condition Cleared",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "TAMPER_CLEARED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X071C": {
+    "category": "Door",
+    "title": "TTL1 Active",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "TTL1_ACTIVE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X071D": {
+    "category": "Door",
+    "title": "TTL1 Inactive",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "TTL1_INACTIVE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X071E": {
+    "category": "Door",
+    "title": "TTL2 Active",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "TTL2_ACTIVE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X071F": {
+    "category": "Door",
+    "title": "TTL2 Inactive",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "TTL2_INACTIVE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0720": {
+    "category": "Door",
+    "title": "Keypad entries have been locked out for too many failed attempts",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "KEYPAD_LOCKOUT",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0721": {
+    "category": "Door",
+    "title": "Door Open",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "DOOR_OPEN",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0722": {
+    "category": "Door",
+    "title": "Door Closed",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "DOOR_CLOSED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0723": {
+    "category": "Door",
+    "title": "Mechanical Override",
+    "sourceCategory": "Door Action / Switch Audits (0x0700)",
+    "auditAlert": "Audit",
+    "caption": "MECHANICAL_OVERRIDE",
+    "dataDescription": "Unlock"
+  },
+  "0X0800": {
+    "category": "Firmware",
+    "title": "Lock Programmed",
+    "sourceCategory": "Firmware Update Audits (0x0800)",
+    "auditAlert": "Audit",
+    "caption": "LOCK_PROGRAMMED",
+    "dataDescription": "Main Application Success"
+  },
+  "0X0801": {
+    "category": "Firmware",
+    "title": "Firmware Reset to Factory Version",
+    "sourceCategory": "Firmware Update Audits (0x0800)",
+    "auditAlert": "Audit",
+    "caption": "LOCK_FFR",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0802": {
+    "category": "Firmware",
+    "title": "Firmware Updated",
+    "sourceCategory": "Firmware Update Audits (0x0800)",
+    "auditAlert": "Audit",
+    "caption": "LOCK_UPDATE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0803": {
+    "category": "Firmware",
+    "title": "Firmware Image Invalid",
+    "sourceCategory": "Firmware Update Audits (0x0800)",
+    "auditAlert": "Audit",
+    "caption": "LOCK_IMAGE_INVALID",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0804": {
+    "category": "Firmware",
+    "title": "Firmware Image Incompatible",
+    "sourceCategory": "Firmware Update Audits (0x0800)",
+    "auditAlert": "Audit",
+    "caption": "LOCK_IMAGE_INCOMPATIBLE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0900": {
+    "category": "System",
+    "title": "Data Parse Event",
+    "sourceCategory": "JSON Audits (0x0900)",
+    "auditAlert": "Audit",
+    "caption": "PARSE_ERROR",
+    "dataDescription": "Data Framing Error"
+  },
+  "0X0901": {
+    "category": "System",
+    "title": "Data Parser Ignored Data",
+    "sourceCategory": "JSON Audits (0x0900)",
+    "auditAlert": "Audit",
+    "caption": "PARSE_IGNORED_DATA",
+    "dataDescription": "Ignored one or more JSON tags, including valid Non CERT tags (valid form but not supported)"
+  },
+  "0X0A00": {
+    "category": "System",
+    "title": "Daylight Saving Time Event",
+    "sourceCategory": "RTCC Audits (0x0A00)",
+    "auditAlert": "Audit",
+    "caption": "DST_CHANGED_TIME",
+    "dataDescription": "Change Backward"
+  },
+  "0X0A01": {
+    "category": "System",
+    "title": "Real Time Clock",
+    "sourceCategory": "RTCC Audits (0x0A00)",
+    "auditAlert": "Audit",
+    "caption": "RTCC_ERROR",
+    "dataDescription": "Invalid Time Error"
+  },
+  "0X0A02": {
+    "category": "System",
+    "title": "Real Time Clock Value Changed",
+    "sourceCategory": "RTCC Audits (0x0A00)",
+    "auditAlert": "Audit",
+    "caption": "TIME_CHANGE",
+    "dataDescription": "Data representes the timedifference LSB in seconds (defaulted to 0x0000, when no data or not applicable)"
+  },
+  "0X0A03": {
+    "category": "System",
+    "title": "Real Time Clock Value Changed (MSB)",
+    "sourceCategory": "RTCC Audits (0x0A00)",
+    "auditAlert": "Audit",
+    "caption": "TIME_CHANGE",
+    "dataDescription": "Data representes the timedifference MSB in seconds only when presents"
+  },
+  "0X0B00": {
+    "category": "Network",
+    "title": "Wi-Fi Power Status",
+    "sourceCategory": "WIFI Audits (0x0B00)",
+    "auditAlert": "Audit",
+    "caption": "WIFI_ON_OFF",
+    "dataDescription": "Off"
+  },
+  "0X0B01": {
+    "category": "Network",
+    "title": "Wi-Fi Association Status",
+    "sourceCategory": "WIFI Audits (0x0B00)",
+    "auditAlert": "Audit",
+    "caption": "WIFI_AP_ASSOC_DISASSOC",
+    "dataDescription": "Disassociated"
+  },
+  "0X0B02": {
+    "category": "Network",
+    "title": "Wi-Fi Event",
+    "sourceCategory": "WIFI Audits (0x0B00)",
+    "auditAlert": "Audit",
+    "caption": "WIFI_AP_ASSOC_FAIL",
+    "dataDescription": "WIFI_CMD_ACK_SUCCESS"
+  },
+  "0X0B03": {
+    "category": "Network",
+    "title": "Wi-Fi RSSI Value (in -dBm)",
+    "sourceCategory": "WIFI Audits (0x0B00)",
+    "auditAlert": "Audit",
+    "caption": "WIFI_RSSI",
+    "dataDescription": "RSSI DB Value (Received Signal Strength Indicator)"
+  },
+  "0X0B04": {
+    "category": "Network",
+    "title": "Wi-Fi Host Connection",
+    "sourceCategory": "WIFI Audits (0x0B00)",
+    "auditAlert": "Audit",
+    "caption": "WIFI_HOST_CONNECT_DISCONNECT",
+    "dataDescription": "Disconnected"
+  },
+  "0X0B05": {
+    "category": "Network",
+    "title": "Wi-Fi Host Connection Event",
+    "sourceCategory": "WIFI Audits (0x0B00)",
+    "auditAlert": "Audit",
+    "caption": "WIFI_HOST_CONN_FAIL",
+    "dataDescription": "WIFI_CMD_ACK_SUCCESS"
+  },
+  "0X0B06": {
+    "category": "Network",
+    "title": "Valid HTTP Header Received via Wi-Fi",
+    "sourceCategory": "WIFI Audits (0x0B00)",
+    "auditAlert": "Audit",
+    "caption": "WIFI_GOT_VALID_HTTP_HEAD",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0B07": {
+    "category": "Network",
+    "title": "Download via Wi-Fi Successful",
+    "sourceCategory": "WIFI Audits (0x0B00)",
+    "auditAlert": "Audit",
+    "caption": "WIFI_DLD_SUCCESS",
+    "dataDescription": "WIFI_OLD_SUCCESS"
+  },
+  "0X0B08": {
+    "category": "Network",
+    "title": "Wi-Fi Download Event",
+    "sourceCategory": "WIFI Audits (0x0B00)",
+    "auditAlert": "Audit",
+    "caption": "WIFI_DLD_FAIL",
+    "dataDescription": "WIFI_CMD_ACK_SUCCESS"
+  },
+  "0X0B09": {
+    "category": "Network",
+    "title": "Wi-Fi Configuration Updated",
+    "sourceCategory": "WIFI Audits (0x0B00)",
+    "auditAlert": "Audit",
+    "caption": "WIFI_CONFIG_UPDATE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0B0A": {
+    "category": "Network",
+    "title": "Wi-Fi Event Triggered",
+    "sourceCategory": "WIFI Audits (0x0B00)",
+    "auditAlert": "Audit",
+    "caption": "WIFI_EVENT_TRIG",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0B0B": {
+    "category": "Network",
+    "title": "Wi-Fi Module Power-On Failed",
+    "sourceCategory": "WIFI Audits (0x0B00)",
+    "auditAlert": "Audit",
+    "caption": "WIFI_ON_FAIL",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0B0C": {
+    "category": "Network",
+    "title": "WIFI HTTP Error",
+    "sourceCategory": "WIFI Audits (0x0B00)",
+    "auditAlert": "Audit",
+    "caption": "WIFI_HTTP_ERROR",
+    "dataDescription": "WiFi HTTP Error (XXXX = hex value of standard HTTP error)"
+  },
+  "0X0B0D": {
+    "category": "Network",
+    "title": "WIFI Configuration Unable to Upload",
+    "sourceCategory": "WIFI Audits (0x0B00)",
+    "auditAlert": "Audit",
+    "caption": "WIFI_UPDATE_CONFIG_FAIL",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0B0E": {
+    "category": "Network",
+    "title": "New Access Point Configuration Change",
+    "sourceCategory": "WIFI Audits (0x0B00)",
+    "auditAlert": "Audit",
+    "caption": "WIFI_NEW_AP_UPDATE",
+    "dataDescription": "New Access Point Config is successfully accepted"
+  },
+  "0X0C00": {
+    "category": "System",
+    "title": "Sleep Current (in uA)",
+    "sourceCategory": "System Current Audits (0x0C00)",
+    "auditAlert": "Audit",
+    "caption": "SLEEP_CURRENT",
+    "dataDescription": "Sleep Current in uA"
+  },
+  "0X0C01": {
+    "category": "System",
+    "title": "Sleep Current With BLE (in uA)",
+    "sourceCategory": "System Current Audits (0x0C00)",
+    "auditAlert": "Audit",
+    "caption": "SLEEP_CURRENT_WITH_BLE",
+    "dataDescription": "Sleep Current in uA"
+  },
+  "0X0C02": {
+    "category": "System",
+    "title": "Motor Status",
+    "sourceCategory": "System Current Audits (0x0C00)",
+    "auditAlert": "Audit",
+    "caption": "MOTOR_CURRENT",
+    "dataDescription": "Failed to Turn On"
+  },
+  "0X0C04": {
+    "category": "System",
+    "title": "Reader Current (in mA)",
+    "sourceCategory": "System Current Audits (0x0C00)",
+    "auditAlert": "Audit",
+    "caption": "READER_CURRENT",
+    "dataDescription": "Daily Max Current in mA"
+  },
+  "0X0C05": {
+    "category": "System",
+    "title": "Powered Output Current (in mA)",
+    "sourceCategory": "System Current Audits (0x0C00)",
+    "auditAlert": "Audit",
+    "caption": "POWERED_OUTPUT_CURRENT",
+    "dataDescription": "Daily Max Current in mA"
+  },
+  "0X0C06": {
+    "category": "System",
+    "title": "Reader Power Fault Detected",
+    "sourceCategory": "System Current Audits (0x0C00)",
+    "auditAlert": "Audit",
+    "caption": "READER_CURRENT_FAULT",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0C07": {
+    "category": "System",
+    "title": "Powered Output Fault Detected",
+    "sourceCategory": "System Current Audits (0x0C00)",
+    "auditAlert": "Audit",
+    "caption": "POWERED_OUTPUT_FAULT",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0D00": {
+    "category": "System",
+    "title": "Initiated Built-In-Test",
+    "sourceCategory": "System Diagnostic Audits (0x0D00)",
+    "auditAlert": "Audit",
+    "caption": "IBIT_RESULT",
+    "dataDescription": "BLE Module (0x00), Pass (0x00)"
+  },
+  "0X0D01": {
+    "category": "System",
+    "title": "Interboard Communications",
+    "sourceCategory": "System Diagnostic Audits (0x0D00)",
+    "auditAlert": "Audit",
+    "caption": "IB_COMM",
+    "dataDescription": "Passed"
+  },
+  "0X0D02": {
+    "category": "System",
+    "title": "POST Test Results",
+    "sourceCategory": "System Diagnostic Audits (0x0D00)",
+    "auditAlert": "Audit",
+    "caption": "POST_RESULT",
+    "dataDescription": "BLE Module (0x00), Pass (0x00)"
+  },
+  "0X0D03": {
+    "category": "System",
+    "title": "Reader False Detect",
+    "sourceCategory": "System Diagnostic Audits (0x0D00)",
+    "auditAlert": "Audit",
+    "caption": "RDR_FALSE_DETECT",
+    "dataDescription": "Number of occurrences"
+  },
+  "0X0D04": {
+    "category": "System",
+    "title": "Reader Power Mode",
+    "sourceCategory": "System Diagnostic Audits (0x0D00)",
+    "auditAlert": "Audit",
+    "caption": "RDR_PWR_MODE",
+    "dataDescription": "Normal - all reader technologies enabled ASK, FSK - low frequency HF - High Frequency TSI - Touch Sense Input (cap sense)"
+  },
+  "0X0D05": {
+    "category": "System",
+    "title": "Reader State",
+    "sourceCategory": "System Diagnostic Audits (0x0D00)",
+    "auditAlert": "Audit",
+    "caption": "RDR_STATE",
+    "dataDescription": "Reader state during card read Idle"
+  },
+  "0X0D06": {
+    "category": "System",
+    "title": "N- Samples",
+    "sourceCategory": "System Diagnostic Audits (0x0D00)",
+    "auditAlert": "Audit",
+    "caption": "N_SAMPLES",
+    "dataDescription": "Number of Cap Sense Circuit Scans"
+  },
+  "0X0D07": {
+    "category": "System",
+    "title": "Delta",
+    "sourceCategory": "System Diagnostic Audits (0x0D00)",
+    "auditAlert": "Audit",
+    "caption": "DELTA",
+    "dataDescription": "Value of cap sense reader sensitivity"
+  },
+  "0X0D08": {
+    "category": "System",
+    "title": "Old False Detect Value",
+    "sourceCategory": "System Diagnostic Audits (0x0D00)",
+    "auditAlert": "Audit",
+    "caption": "OLD_FALSE_DETECT",
+    "dataDescription": "Number of occurrences that hardware scan (cap sense circuit) detects above upper threshold setting"
+  },
+  "0X0D09": {
+    "category": "System",
+    "title": "New False Detect Value",
+    "sourceCategory": "System Diagnostic Audits (0x0D00)",
+    "auditAlert": "Audit",
+    "caption": "NEW_FALSE_DETECT",
+    "dataDescription": "Number of occurrences hardware scan (cap sense circuit) and 2 software scans detects above upper threshold setting"
+  },
+  "0X0D0A": {
+    "category": "System",
+    "title": "Baseline - Upper 2 bytes",
+    "sourceCategory": "System Diagnostic Audits (0x0D00)",
+    "auditAlert": "Audit",
+    "caption": "BASELINE_UPPER",
+    "dataDescription": "Upper 2 bytes of proximity detect baseline value"
+  },
+  "0X0D0B": {
+    "category": "System",
+    "title": "Baseline - Lower 2 bytes",
+    "sourceCategory": "System Diagnostic Audits (0x0D00)",
+    "auditAlert": "Audit",
+    "caption": "BASELINE_LOWER",
+    "dataDescription": "Lower 2 bytes of proximity detect baseline value"
+  },
+  "0X0D0C": {
+    "category": "System",
+    "title": "Inter Board Error",
+    "sourceCategory": "System Diagnostic Audits (0x0D00)",
+    "auditAlert": "Audit",
+    "caption": "IB_ERROR",
+    "dataDescription": "nWake assert error - Monitoring the GPIO line in between reader and main board"
+  },
+  "0X0D0D": {
+    "category": "System",
+    "title": "Reader Reset",
+    "sourceCategory": "System Diagnostic Audits (0x0D00)",
+    "auditAlert": "Audit",
+    "caption": "READER_RESET",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0D0E": {
+    "category": "System",
+    "title": "Device Lockout",
+    "sourceCategory": "System Diagnostic Audits (0x0D00)",
+    "auditAlert": "Audit",
+    "caption": "IPC_AUTH_LOCKOUT",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0D0F": {
+    "category": "System",
+    "title": "Main Auth Attempts",
+    "sourceCategory": "System Diagnostic Audits (0x0D00)",
+    "auditAlert": "Audit",
+    "caption": "IPC_AUTH_ATTEMPTS_DC",
+    "dataDescription": "XXXX = number of attempts (0-4000)"
+  },
+  "0X0D10": {
+    "category": "System",
+    "title": "Reader Auth Attempts",
+    "sourceCategory": "System Diagnostic Audits (0x0D00)",
+    "auditAlert": "Audit",
+    "caption": "IPC_AUTH_ATTEMPTS_AC",
+    "dataDescription": "XXXX = number of attempts (0-4000)"
+  },
+  "0X0D11": {
+    "category": "System",
+    "title": "Incompatible Reader",
+    "sourceCategory": "System Diagnostic Audits (0x0D00)",
+    "auditAlert": "Audit",
+    "caption": "IPC_SEC_REV_FAILURE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0D12": {
+    "category": "System",
+    "title": "Reader Comm Failure",
+    "sourceCategory": "System Diagnostic Audits (0x0D00)",
+    "auditAlert": "Audit",
+    "caption": "IPC_FAILED_AUTH",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0D13": {
+    "category": "System",
+    "title": "Motor Run Retry Count",
+    "sourceCategory": "System Diagnostic Audits (0x0D00)",
+    "auditAlert": "Audit",
+    "caption": "MOTOR_RUN_RETRY_COUNT",
+    "dataDescription": "XXXX = number of retry attempts (1-255)"
+  },
+  "0X0E01": {
+    "category": "Power",
+    "title": "Reset Diagnostics",
+    "sourceCategory": "System Power Up Audits (0x0E00)",
+    "auditAlert": "Audit",
+    "caption": "RESET_DIAGNOSTICS",
+    "dataDescription": "Reset Reason Diagnostics Data"
+  },
+  "0X0E04": {
+    "category": "Power",
+    "title": "Jump Start Detected",
+    "sourceCategory": "System Power Up Audits (0x0E00)",
+    "auditAlert": "Audit",
+    "caption": "JUMP_START_DETECTED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0F00": {
+    "category": "System",
+    "title": "LockState Override Passage",
+    "sourceCategory": "Lock State Override (0x0F00)",
+    "auditAlert": "Audit",
+    "caption": "LOCKSTATE_OVERRIDE_PASSAGE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0F01": {
+    "category": "System",
+    "title": "LockState Override Secured",
+    "sourceCategory": "Lock State Override (0x0F00)",
+    "auditAlert": "Audit",
+    "caption": "LOCKSTATE_OVERRIDE_SECURED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0F02": {
+    "category": "System",
+    "title": "LockState Override Momentary Unlock",
+    "sourceCategory": "Lock State Override (0x0F00)",
+    "auditAlert": "Audit",
+    "caption": "LOCKSTATE_OVERRIDE_MOMENTARY UNLOCK",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0F03": {
+    "category": "System",
+    "title": "LockState Override Holiday Restricted",
+    "sourceCategory": "Lock State Override (0x0F00)",
+    "auditAlert": "Audit",
+    "caption": "LOCKSTATE_OVERRIDE_HOLIDAY RESTRICTED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0F04": {
+    "category": "System",
+    "title": "LockState Override Freeze Secure",
+    "sourceCategory": "Lock State Override (0x0F00)",
+    "auditAlert": "Audit",
+    "caption": "LOCKSTATE_OVERRIDE_FREEZE SECURE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0F05": {
+    "category": "System",
+    "title": "LockState Override Freeze Passage",
+    "sourceCategory": "Lock State Override (0x0F00)",
+    "auditAlert": "Audit",
+    "caption": "LOCKSTATE_OVERRIDE_FREEZE PASSAGE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0F06": {
+    "category": "System",
+    "title": "LockState Override Timed Unlock",
+    "sourceCategory": "Lock State Override (0x0F00)",
+    "auditAlert": "Audit",
+    "caption": "LOCKSTATE_OVERRIDE_TIMED UNLOCK",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0F07": {
+    "category": "System",
+    "title": "LockState Override Aux Relay Enable",
+    "sourceCategory": "Lock State Override (0x0F00)",
+    "auditAlert": "Audit",
+    "caption": "LOCKSTATE_OVERRIDE_AUX_ENABLED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0F08": {
+    "category": "System",
+    "title": "LockState Override Aux Relay Disabled",
+    "sourceCategory": "Lock State Override (0x0F00)",
+    "auditAlert": "Audit",
+    "caption": "LOCKSTATE_OVERRIDE_AUX_DISABLED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0F09": {
+    "category": "System",
+    "title": "LockState Override TTL1 Active",
+    "sourceCategory": "Lock State Override (0x0F00)",
+    "auditAlert": "Audit",
+    "caption": "LOCKSTATE_OVERRIDE_TTL1_ACTIVE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0F0A": {
+    "category": "System",
+    "title": "LockState Override TTL1 Inactive",
+    "sourceCategory": "Lock State Override (0x0F00)",
+    "auditAlert": "Audit",
+    "caption": "LOCKSTATE_OVERRIDE_TTL1_INACTIVE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0F0B": {
+    "category": "System",
+    "title": "LockState Override TTL2 Active",
+    "sourceCategory": "Lock State Override (0x0F00)",
+    "auditAlert": "Audit",
+    "caption": "LOCKSTATE_OVERRIDE_TTL2_ACTIVE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0F0C": {
+    "category": "System",
+    "title": "LockState Override TTL2 Inactive",
+    "sourceCategory": "Lock State Override (0x0F00)",
+    "auditAlert": "Audit",
+    "caption": "LOCKSTATE_OVERRIDE_TTL2_INACTIVE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X0F0D": {
+    "category": "System",
+    "title": "LockState Clear Override",
+    "sourceCategory": "Lock State Override (0x0F00)",
+    "auditAlert": "Audit",
+    "caption": "LOCKSTATE_OVERRIDE_CLEAR",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X1000": {
+    "category": "Gateway",
+    "title": "Gateway Linked",
+    "sourceCategory": "Gateway Audits (0x1000)",
+    "auditAlert": "Audit",
+    "caption": "GATEWAY_LINKED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X1001": {
+    "category": "Gateway",
+    "title": "Gateway Link Failed",
+    "sourceCategory": "Gateway Audits (0x1000)",
+    "auditAlert": "Audit",
+    "caption": "GATEWAY_LINKED_FAILED",
+    "dataDescription": "COMMISSION ERROR"
+  },
+  "0X1002": {
+    "category": "Gateway",
+    "title": "Gateway Comm Established",
+    "sourceCategory": "Gateway Audits (0x1000)",
+    "auditAlert": "Audit",
+    "caption": "GATEWAY_COMM_ESTIBLISHED",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X1003": {
+    "category": "Gateway",
+    "title": "Gateway Comm Error",
+    "sourceCategory": "Gateway Audits (0x1000)",
+    "auditAlert": "Audit",
+    "caption": "GATEWAY_COMM_ERROR",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X1100": {
+    "category": "System",
+    "title": "HMAC Validation Passed",
+    "sourceCategory": "Integrity and Authenticity Audits (0x1100)",
+    "auditAlert": "Audit",
+    "caption": "HMAC_VALIDATION_PASSED",
+    "dataDescription": "Type: SHA1 (0x01), Code: Successful validation, no data (0x00)"
+  },
+  "0X1101": {
+    "category": "System",
+    "title": "HMAC Validation Failed",
+    "sourceCategory": "Integrity and Authenticity Audits (0x1100)",
+    "auditAlert": "Audit",
+    "caption": "HMAC_VALIDATION_FAILED",
+    "dataDescription": "Type: SHA1 (0x01), Code: Digest or Timestamp Failure (0x01)"
+  },
+  "0X1102": {
+    "category": "System",
+    "title": "HMAC Validation On",
+    "sourceCategory": "Integrity and Authenticity Audits (0x1100)",
+    "auditAlert": "Audit",
+    "caption": "HMAC_VALIDATION_ON",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X1103": {
+    "category": "System",
+    "title": "HMAC Validation Off",
+    "sourceCategory": "Integrity and Authenticity Audits (0x1100)",
+    "auditAlert": "Audit",
+    "caption": "HMAC_VALIDATION_OFF",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X1200": {
+    "category": "Network",
+    "title": "Ethernet Cable Status",
+    "sourceCategory": "Ethernet Audits (0x1200)",
+    "auditAlert": "Audit",
+    "caption": "ETHERNET_CABLE_CONNECT_DISCONNECT",
+    "dataDescription": "Disconnected"
+  },
+  "0X1201": {
+    "category": "Network",
+    "title": "Ethernet Config Updated",
+    "sourceCategory": "Ethernet Audits (0x1200)",
+    "auditAlert": "Audit",
+    "caption": "ETHERNET_CONFIG_UPDATE",
+    "dataDescription": "None - no data (defaulted to 0x0000)"
+  },
+  "0X1202": {
+    "category": "Network",
+    "title": "Ethernet Download Success",
+    "sourceCategory": "Ethernet Audits (0x1200)",
+    "auditAlert": "Audit",
+    "caption": "ETHERNET_DLD_SUCCESS",
+    "dataDescription": "CERT Download Success"
+  },
+  "0X1203": {
+    "category": "Network",
+    "title": "Ethernet Download Fail",
+    "sourceCategory": "Ethernet Audits (0x1200)",
+    "auditAlert": "Audit",
+    "caption": "ETHERNET_DLD_FAIL",
+    "dataDescription": "CERT Download Success"
+  },
+  "0X1204": {
+    "category": "Network",
+    "title": "Ethernet WS Update Event",
+    "sourceCategory": "Ethernet Audits (0x1200)",
+    "auditAlert": "Audit",
+    "caption": "ETHERNET_WS_STATUS_EVENT",
+    "dataDescription": "WS Host Disconnected"
+  },
+  "0X1205": {
+    "category": "Network",
+    "title": "Ethernet WS Close",
+    "sourceCategory": "Ethernet Audits (0x1200)",
+    "auditAlert": "Audit",
+    "caption": "ETHERNET_WS_CLOSE_EVENT",
+    "dataDescription": "WS Connection Close - Protocol Error Detected"
+  },
+  "0X1206": {
+    "category": "Network",
+    "title": "Ethernet WS ca Authentication Failure",
+    "sourceCategory": "Ethernet Audits (0x1200)",
+    "auditAlert": "Audit",
+    "caption": "ETHERNET_WS_CA_AUTH_FAILURE_RTC_EVENT",
+    "dataDescription": "0x0000 - CA_CERT_AUTH_RTC_VALID_ERROR 0x0001 - RTC_NTP_ATTEMPT_FAIL 0x0002 - RTC_BACKUP_NTP_ATTEMPT_FAIL 0x0003 - RTC_AUDIT_TIME_ATTEMPT_FAIL 0x0004 - RTC_CA_CERT_TIME_ATTEMPT_FAIL"
+  },
+  "0X1300": {
+    "category": "Access",
+    "title": "Credential not in DB. Bit length of credential. Audit disabled in default config.",
+    "sourceCategory": "Credential Not In DB Audits (0x1300)",
+    "auditAlert": "Audit",
+    "caption": "CRED_NOT_IN_DB_BIT_LENGTH",
+    "dataDescription": "XXXX = bit length of presented credential that is not in database. Credential data in following audits. Current max length support is 64 bits."
+  },
+  "0X1301": {
+    "category": "Access",
+    "title": "Credential not in DB. Bits 15 to 0 of credential. Audit disabled in default config.",
+    "sourceCategory": "Credential Not In DB Audits (0x1300)",
+    "auditAlert": "Audit",
+    "caption": "CRED_NOT_IN_DB_BITS_15_TO_0",
+    "dataDescription": "XXXX = Bits 15 to 0 of credential. Padded with 0's if credential doesn't fill all bits in audit."
+  },
+  "0X1302": {
+    "category": "Access",
+    "title": "Credential not in DB. Bits 31 to 16 of credential. (Optional, only generated if CRED_NOT_IN_DB_BIT_LENGTH is greater tha 16 bits) Audit disabled in default config.",
+    "sourceCategory": "Credential Not In DB Audits (0x1300)",
+    "auditAlert": "Audit",
+    "caption": "CRED_NOT_IN_DB_BITS_31_TO_16",
+    "dataDescription": "XXXX = Bits 31 to 16 of credential. Padded with 0's if credential doesn't fill all bits in audit."
+  },
+  "0X1303": {
+    "category": "Access",
+    "title": "Credential not in DB. Bits 47 to 32 of credential. (Optional, only generated if CRED_NOT_IN_DB_BIT_LENGTH is greater tha 32 bits) Audit disabled in default config.",
+    "sourceCategory": "Credential Not In DB Audits (0x1300)",
+    "auditAlert": "Audit",
+    "caption": "CRED_NOT_IN_DB_BITS_47_TO_32",
+    "dataDescription": "XXXX = Bits 47 to 32 of credential. Padded with 0's if credential doesn't fill all bits in audit."
+  },
+  "0X1304": {
+    "category": "Access",
+    "title": "Credential not in DB. Bits 63 to 48 of credential. (Optional, only generated if CRED_NOT_IN_DB_BIT_LENGTH is greater tha 48 bits) Audit disabled in default config.",
+    "sourceCategory": "Credential Not In DB Audits (0x1300)",
+    "auditAlert": "Audit",
+    "caption": "CRED_NOT_IN_DB_BITS_63_TO_48",
+    "dataDescription": "XXXX = Bits 63 to 48 of credential. Padded with 0's if credential doesn't fill all bits in audit."
+  },
+  "0X1400": {
+    "category": "System",
+    "title": "No Tour Enrollment Success",
+    "sourceCategory": "No Tour Enrollment Audits (0x1400)",
+    "auditAlert": "Audit",
+    "caption": "NO_TOUR_WRITE_SUCCESS",
+    "dataDescription": "Success - No Tour Data Write"
+  },
+  "0X1401": {
+    "category": "System",
+    "title": "No Tour Enrollment Fail",
+    "sourceCategory": "No Tour Enrollment Audits (0x1400)",
+    "auditAlert": "Audit",
+    "caption": "NO_TOUR_WRITE_FAILURE",
+    "dataDescription": "Authentication Error (wrong credential key)"
+  },
+  "0X1402": {
+    "category": "System",
+    "title": "No Tour Timeout",
+    "sourceCategory": "No Tour Enrollment Audits (0x1400)",
+    "auditAlert": "Audit",
+    "caption": "NO_TOUR_NOT_PRESENTED_TIMEOUT",
+    "dataDescription": "Card not presented in time."
+  },
+  "0X1500": {
+    "category": "System",
+    "title": "Capture of short DHCP lease time (in seconds) assigned to device, value refreshed upon value change when lease time < Y minutes. Value set to 0 when device configured for static IP. Value Reset upon server host re-connect.",
+    "sourceCategory": "System Monitoring Health Audits (0x1500)",
+    "auditAlert": "Audit",
+    "caption": "SYSHMON_DHCP_SHORT_LEASE_TIME",
+    "dataDescription": "minimum lease time (minutes)"
+  },
+  "0X1501": {
+    "category": "System",
+    "title": "Capture of DHCP network change events since host server connection established. Value refreshed upon event capture. (compiled code won't lead to function handling network changed). Value Reset upon server host re-connect.",
+    "sourceCategory": "System Monitoring Health Audits (0x1500)",
+    "auditAlert": "Audit",
+    "caption": "SYSHMON_DHCP_NETWORK_CHANGED",
+    "dataDescription": "count of DHCP network change events"
+  },
+  "0X1502": {
+    "category": "System",
+    "title": "Capture of counts DHCP client received NAK response since host server connection established. Value refreshed upon event capture. Value Reset upon server host re-connect.",
+    "sourceCategory": "System Monitoring Health Audits (0x1500)",
+    "auditAlert": "Audit",
+    "caption": "SYSHMON_DHCP_CLIENT_RECV_NAK",
+    "dataDescription": "count of DHCP client NAK events"
+  },
+  "0X1503": {
+    "category": "System",
+    "title": "Capture of counts DHCP client declines offered IP address (i.e. address already in use by another host as determined through ARP) since host server connection established. Value refreshed upon event capture. Value Reset upon server host re-connect.",
+    "sourceCategory": "System Monitoring Health Audits (0x1500)",
+    "auditAlert": "Audit",
+    "caption": "SYSHMON_DHCP_CLIENT_DECLINE",
+    "dataDescription": "count of DHCP client decline events"
+  },
+  "0X1504": {
+    "category": "System",
+    "title": "Capture of network receive timeout events since host server connection established. Value refreshed upon event capture. Value Reset upon server host re-connect.",
+    "sourceCategory": "System Monitoring Health Audits (0x1500)",
+    "auditAlert": "Audit",
+    "caption": "SYSHMON_NETWORK_RX_TIMEOUTS",
+    "dataDescription": "count of network receive timeout events"
+  },
+  "0X1505": {
+    "category": "System",
+    "title": "Capture of network receive error events since host server connection established. Value refreshed upon event capture. Value Reset upon server host re-connect.",
+    "sourceCategory": "System Monitoring Health Audits (0x1500)",
+    "auditAlert": "Audit",
+    "caption": "SYSHMON_NETWORK_RX_ERRORS",
+    "dataDescription": "count of network receive errors"
+  },
+  "0X1506": {
+    "category": "System",
+    "title": "Capture of network transmit timeout events since host server connection established. Value refreshed upon event capture. Value Reset upon server host re-connect.",
+    "sourceCategory": "System Monitoring Health Audits (0x1500)",
+    "auditAlert": "Audit",
+    "caption": "SYSHMON_NETWORK_TX_TIMEOUTS",
+    "dataDescription": "count of network transmit timeout events"
+  },
+  "0X1507": {
+    "category": "System",
+    "title": "Capture of network transmit error events since host server connection established. Value refreshed upon event capture. Value Reset upon server host re-connect.",
+    "sourceCategory": "System Monitoring Health Audits (0x1500)",
+    "auditAlert": "Audit",
+    "caption": "SYSHMON_NETWORK_TX_ERRORS",
+    "dataDescription": "count of network transmit timeout events"
+  },
+  "0X150A": {
+    "category": "System",
+    "title": "Hi capture of TCPIP heap memory usage at/above 70% of allocated space since host server connection established. Value refreshed upon value change, polled every 1 second. Value Reset upon server host re-connect.",
+    "sourceCategory": "System Monitoring Health Audits (0x1500)",
+    "auditAlert": "Audit",
+    "caption": "SYSHMON_TCPIP_HEAP_MEM_MARK",
+    "dataDescription": "Memory mark uaage of TCPIP heap"
+  },
+  "0XE000": {
+    "category": "System",
+    "title": "Reserved for External Use",
+    "sourceCategory": "Reserved Block (0xE000)",
+    "auditAlert": "NA",
+    "caption": "Reserved for External Use",
+    "dataDescription": "Reserved for External Use"
+  },
+  "0XEFFF": {
+    "category": "System",
+    "title": "(entire block held for customer use, Allegion shall not use)",
+    "sourceCategory": "Reserved Block (0xE000)",
+    "auditAlert": "NA",
+    "caption": "(entire block held for customer use, Allegion shall not use)",
+    "dataDescription": "(entire block held for customer use, Allegion shall not use)"
+  },
+  "0XFFFF": {
+    "category": "System",
+    "title": "Unknown",
+    "sourceCategory": "Unknown Audits (0xFFFF)",
+    "auditAlert": "NA",
+    "caption": "Unknown",
+    "dataDescription": "Unknown"
+  }
+}

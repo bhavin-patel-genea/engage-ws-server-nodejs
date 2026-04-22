@@ -582,15 +582,15 @@ These are decoded in `src/eventCodes.js` against the ENGAGE Audits spec (v0.22) 
 
 ### Phase 6 — Ping / Pong Heartbeat *(runs continuously)*
 
-The server pings every 5 seconds. The gateway responds with a pong. If more than 3 consecutive pongs are missed (15 seconds total) the server force-closes the connection with code `1001`.
+The server pings every 15 seconds. The gateway responds with a pong. If more than 3 consecutive pongs are missed (45 seconds total) the server force-closes the connection with code `1001`.
 
 ```js
 // src/EngageWsServer.js
-const PING_INTERVAL_MS = 5_000;
-const MAX_MISSED_PINGS = 3;   // 5s × 3 = 15s total before forced disconnect
+const PING_INTERVAL_MS = 15_000;
+const MAX_MISSED_PINGS = 3;   // 15s × 3 = 45s total before forced disconnect
 ```
 
-> For edge-device gateways uploading large user databases over BLE, increase `PING_INTERVAL_MS` to `20_000` — database operations can take up to 60 s and will cause false-positive disconnects at the 5 s default.
+> For edge-device gateways uploading large user databases over BLE, increase `PING_INTERVAL_MS` to `20_000` — database operations can take up to 60 s and can still cause false-positive disconnects with shorter intervals.
 
 ---
 
@@ -899,9 +899,9 @@ The gateway rejected the Stage 1a response — either:
 - The `sitekey` used to compute the HMAC does not match the gateway's site key
 - The response JSON format is wrong (check server logs for errors)
 
-### Connection drops after ~15 seconds
+### Connection drops after ~45 seconds
 
-Ping timeout: 5 s interval × 3 missed pings = 15 s forced disconnect. If the gateway is uploading a large user database, increase the interval in `src/EngageWsServer.js`:
+Ping timeout: 15 s interval × 3 missed pings = 45 s forced disconnect. If the gateway is uploading a large user database, increase the interval in `src/EngageWsServer.js`:
 
 ```js
 const PING_INTERVAL_MS = 20_000;  // increase from 5 000 to 20 000 for edge device support
